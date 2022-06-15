@@ -16,7 +16,9 @@ mod benchmarking;
 
 #[frame_support::pallet]
 pub mod pallet {
-	use frame_support::{pallet_prelude::{*, ValueQuery}};
+	use core::fmt::rt::v1::Count;
+
+use frame_support::{pallet_prelude::{*, ValueQuery}, traits::{Currency, tokens::ExistenceRequirement}};
 	use frame_system::pallet_prelude::*;
 	use sp_std::vec::Vec;
 	use scale_info::TypeInfo;
@@ -28,17 +30,18 @@ pub mod pallet {
 		/// Because this pallet emits events, it depends on the runtime's definition of an event.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 		type MaxListSize: Get<u32>;
+		type Currency: Currency<Self::AccountId>;
 	}
 
 	type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
+	type BalanceOf<T> =
+		<<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
 
 	pub type VaccineTypeIndex = u32;
 	pub type VaccineIndex = u32;
 
 	#[derive(Decode, Encode, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo, Default, MaxEncodedLen)]
-	#[scale_info(bounds(), skip_type_params(T))]
 	#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-	#[codec(mel_bound())] 
 	pub struct VaccineTypeInfo {
 	    pub vac_type_id: Option<u32>,
 		// TODO: add metadata or hash of metadata
@@ -46,22 +49,19 @@ pub mod pallet {
 	}
 
 	#[derive(Decode, Encode, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo, Default, MaxEncodedLen)]
-	#[scale_info(bounds(), skip_type_params(T))]
 	#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-	#[codec(mel_bound())] 
-	pub struct VaccineInfo<T: Config> {
+	pub struct VaccineInfo<Account, BoundedAccountList> {
 	    pub vac_id: Option<u32>,
-		pub manufacture_id: Option<T::AccountId>,
-		pub owner_id: Option<T::AccountId>,
-		pub buyer_id: Option<T::AccountId>,
-		pub vao_list: Option<BoundedVec<T::AccountId, T::MaxListSize>>,
+		pub manufacture_id: Option<Account>,
+		pub owner_list: BoundedAccountList,
+		pub vao_list: BoundedAccountList,
 		// true -> buy, false -> not buy
-		pub buy_confirm: Option<bool>,
+		pub buy_confirm: bool,
 		pub vac_type_id: Option<u32>,
 	}
 
 	#[pallet::pallet]
-	// #[pallet::generate_store(pub(super) trait Store)]
+	#[pallet::generate_store(pub(super) trait Store)]
 	pub struct Pallet<T>(_);
 
 
@@ -111,9 +111,8 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::getter(fn vaccines)]
-	pub type Vaccines<T: Config> = StorageMap<_, Blake2_128Concat, u32, VaccineInfo<T>, OptionQuery>;
+	pub type Vaccines<T: Config> = StorageMap<_, Blake2_128Concat, u32, VaccineInfo<AccountIdOf<T>, BoundedVec<AccountIdOf<T>, T::MaxListSize>>, OptionQuery>;
 
-	
 	#[pallet::type_value]
 	pub fn InitialVaccineTypeCount<T: Config>() -> u32 { 1u32 }
 
@@ -128,6 +127,15 @@ pub mod pallet {
 	#[pallet::getter(fn vaccine_count)]
 	pub type VaccineCount<T: Config> = StorageValue<_, VaccineIndex, ValueQuery, InitialVaccineCount<T>>;
 
+	#[pallet::storage]
+	#[pallet::getter(fn want_to_buy)]
+	// TODO: make vaccine list or manage many vaccines in box
+	pub type WantToBuy<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, VaccineIndex, OptionQuery>;
+
+	#[pallet::storage]
+	#[pallet::getter(fn buyable_vaccine)]
+	// TODO: make vaccine list or manage many vaccines in box
+	pub type BuyableVaccine<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, VaccineIndex, OptionQuery>;
 
 	#[pallet::genesis_config]
 	pub struct GenesisConfig<T: Config> {
@@ -158,6 +166,9 @@ pub mod pallet {
 		Approved(T::AccountId),
 		RegisterVaccineType(u32),
 		RegisterVaccine(u32),
+		RequestVaccine(u32),
+		SellVaccine(u32),
+		BuyVaccine(T::AccountId, T::AccountId, u32, BalanceOf<T>),
 	}
 
 	// Errors inform users that something went wrong.
@@ -168,7 +179,12 @@ pub mod pallet {
 		NotClaimed,
 		NotSysMan,
 		NotManufacture,
+		NotRegisteredVaccineType,
 		NotRegisteredVaccine,
+		NotWantToBuy,
+		NotApproved,
+		NotEnoughBalance,
+		VaccineIsRegistered,
 	}
 
 	#[pallet::call]
@@ -396,27 +412,55 @@ pub mod pallet {
 			// only manufacture
 			ensure!(Self::vm(&manufacture), Error::<T>::NotManufacture);
 			// confirm exist vaccine
-			ensure!(<VaccineType<T>>::contains_key(vac_type_id.unwrap()), Error::<T>::NotRegisteredVaccine);
+			ensure!(<VaccineType<T>>::contains_key(vac_type_id.unwrap()), Error::<T>::NotRegisteredVaccineType);
 
-			// create vaccine type information
 			let vac_id = VaccineCount::<T>::get();
-			let vac_info = VaccineInfo::<T> {
-				vac_id: Some(vac_id), 
-				manufacture_id: Some(manufacture.clone()),
-				owner_id: Some(manufacture.clone()), 
-				buyer_id: None,
-				vao_list: None,
-				buy_confirm: Some(false),
-				vac_type_id,
+
+			match Vaccines::<T>::try_get(vac_type_id.unwrap()){
+
+				Ok(_) => return Err(Error::<T>::VaccineIsRegistered)?,
+				Err(_) => {
+					let vac_info = VaccineInfo::<AccountIdOf<T>, BoundedVec<AccountIdOf<T>, T::MaxListSize>>{
+						vac_id: Some(vac_id),
+						manufacture_id: Some(manufacture.clone()),
+						owner_list: Default::default(),
+						vao_list: Default::default(),
+						buy_confirm: false,
+						vac_type_id,
+					};
+					// Update storage.     
+					//<VaccineCount<T>>::put(vac_id + 1);
+					<VaccineCount<T>>::mutate(|count|{
+						*count +=1;
+					});
+					<Vaccines<T>>::insert(&vac_id, vac_info);
+				}
+
 			};
 
-			// Update storage.
-			<VaccineCount<T>>::put(vac_id + 1);
-			<Vaccines<T>>::insert(&vac_id, vac_info);
+
 
 			// Emit an event.
 			Self::deposit_event(Event::RegisterVaccine(vac_id));
 			// Return a successful DispatchResultWithPostInfo
+			Ok(())
+		}
+
+		#[pallet::weight(10_000)]
+		pub fn request_buy(origin: OriginFor<T>, vac_id: Option<u32>, target_id: T::AccountId) -> DispatchResult {
+			let buyer = ensure_signed(origin)?;
+
+			// only manufacture
+			ensure!(Self::vm(target_id), Error::<T>::NotManufacture);
+			// confirm exist vaccine
+			ensure!(<Vaccines<T>>::contains_key(vac_id.unwrap()), Error::<T>::NotRegisteredVaccine);
+
+			// register storage
+			<WantToBuy<T>>::insert(buyer, vac_id.unwrap());
+
+			// Emit an event.
+			Self::deposit_event(Event::RequestVaccine(vac_id.unwrap()));
+
 			Ok(())
 		}
 
@@ -431,20 +475,53 @@ pub mod pallet {
 			// confirm exist vaccine
 			ensure!(<Vaccines<T>>::contains_key(vac_id.unwrap()), Error::<T>::NotRegisteredVaccine);
 
-			// 売りたい人に売る。買う人はそれを承認して買う
-
+			// 買いたい人に売る。買う人はそれを承認して買う
+			// 買いたいか確認
+			ensure!(Self::want_to_buy(&buyer_id) == vac_id, Error::<T>::NotWantToBuy);
+			// 売る関数（ストレージの更新）
 			// Update storage.
-			<VAO<T>>::insert(&claimer, true);
-			<PendingVAO<T>>::insert(&claimer, false);
+			<BuyableVaccine<T>>::insert(&buyer_id, vac_id.unwrap());
+			<WantToBuy<T>>::remove(&buyer_id);
 
 			// Emit an event.
-			Self::deposit_event(Event::Approved(claimer));
+			Self::deposit_event(Event::SellVaccine(vac_id.unwrap()));
 			// Return a successful DispatchResultWithPostInfo
 			Ok(())
 		}
+
+		#[pallet::weight(10_000)]
+		pub fn buy_vaccine(origin: OriginFor<T>, vac_id: Option<u32>, seller: T::AccountId, bid_price: BalanceOf<T>) -> DispatchResult {
+			let buyer = ensure_signed(origin)?;
+
+			// only approved buyer
+			ensure!(Self::buyable_vaccine(&buyer) == vac_id, Error::<T>::NotApproved);
+			// confirm exist vaccine
+			ensure!(<Vaccines<T>>::contains_key(vac_id.unwrap()), Error::<T>::NotRegisteredVaccine);
+
+			// register storage
+			<BuyableVaccine<T>>::remove(&buyer);
+			// update vaccine info
+			let vac_info = <Vaccines<T>>::get(vac_id.unwrap()).unwrap();
+			vac_info.owner_list.clone().try_push(buyer.clone());
+			<Vaccines<T>>::insert(vac_id.unwrap(), vac_info);
+			// pay a fee
+			// TODO: configure fee of vaccine
+			// Check the buyer has enough free balance
+			ensure!(T::Currency::free_balance(&buyer) >= bid_price, <Error<T>>::NotEnoughBalance);
+			T::Currency::transfer(&buyer, &seller, bid_price, ExistenceRequirement::KeepAlive)?;
+
+			// Emit an event.
+			Self::deposit_event(Event::BuyVaccine(buyer, seller, vac_id.unwrap(), bid_price));
+
+			Ok(())
+		}
+
 	}
 /*----------------------------------------------helper function ------------------------------------------------- */
 	impl<T: Config> Pallet<T> {
-		
+
+		pub fn transfer_vaccine() {
+
+		}
 	}
 }
