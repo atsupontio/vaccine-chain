@@ -16,7 +16,7 @@ mod benchmarking;
 
 #[frame_support::pallet]
 pub mod pallet {
-use frame_support::{pallet_prelude::{*, ValueQuery}, traits::{Currency, tokens::ExistenceRequirement}};
+use frame_support::{pallet_prelude::{*, ValueQuery}};
 	use frame_system::pallet_prelude::*;
 	use sp_std::vec::Vec;
 	use scale_info::TypeInfo;
@@ -28,12 +28,9 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, traits::{Currency, tokens::
 		/// Because this pallet emits events, it depends on the runtime's definition of an event.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 		type MaxListSize: Get<u32>;
-		type Currency: Currency<Self::AccountId>;
 	}
 
 	type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
-	type BalanceOf<T> =
-		<<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
 
 	pub type VaccineTypeIndex = u32;
 	pub type VaccineIndex = u32;
@@ -42,7 +39,6 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, traits::{Currency, tokens::
 	#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 	pub struct VaccineTypeInfo {
 	    pub vac_type_id: Option<u32>,
-		pub vac_value: Option<u32>,
 		// TODO: add metadata or hash of metadata
 		// pub metadata: Option<Vec<u8>>,
 	}
@@ -52,7 +48,8 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, traits::{Currency, tokens::
 	pub struct VaccineInfo<Account, BoundedAccountList> {
 	    pub vac_id: Option<u32>,
 		pub manufacture_id: Option<Account>,
-		pub owner_list: BoundedAccountList,
+		pub owner_id: Option<Account>,
+		pub buyer_id: Option<Account>,
 		pub vao_list: BoundedAccountList,
 		// true -> buy, false -> not buy
 		pub buy_confirm: bool,
@@ -126,15 +123,6 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, traits::{Currency, tokens::
 	#[pallet::getter(fn vaccine_count)]
 	pub type VaccineCount<T: Config> = StorageValue<_, VaccineIndex, ValueQuery, InitialVaccineCount<T>>;
 
-	#[pallet::storage]
-	#[pallet::getter(fn want_to_buy)]
-	// TODO: make vaccine list or manage many vaccines in box
-	pub type WantToBuy<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, VaccineIndex, OptionQuery>;
-
-	#[pallet::storage]
-	#[pallet::getter(fn buyable_vaccine)]
-	// TODO: make vaccine list or manage many vaccines in box
-	pub type BuyableVaccine<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, VaccineIndex, OptionQuery>;
 
 	#[pallet::genesis_config]
 	pub struct GenesisConfig<T: Config> {
@@ -163,11 +151,12 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, traits::{Currency, tokens::
 	pub enum Event<T: Config> {
 		Claimed(T::AccountId),
 		Approved(T::AccountId),
-		RegisterVaccineType(u32, u32),
+		RegisterVaccineType(u32),
 		RegisterVaccine(u32),
 		RequestVaccine(u32),
-		SellVaccine(u32),
-		BuyVaccine(T::AccountId, T::AccountId, u32, BalanceOf<T>),
+		TransferVaccine(u32),
+		ReceiveVaccine(T::AccountId, T::AccountId, u32),
+		VaccineApproved(u32, T::AccountId),
 	}
 
 	// Errors inform users that something went wrong.
@@ -178,12 +167,14 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, traits::{Currency, tokens::
 		NotClaimed,
 		NotSysMan,
 		NotManufacture,
+		NotOrganization,
 		NotRegisteredVaccineType,
 		NotRegisteredVaccine,
-		NotWantToBuy,
-		NotApproved,
-		NotEnoughBalance,
 		VaccineIsRegistered,
+		NotVaccineOwner,
+		NotVaccineBuyer,
+		BuyByYourself,
+		NotVaccineTransfered,
 	}
 
 	#[pallet::call]
@@ -381,7 +372,7 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, traits::{Currency, tokens::
 		}
 
 		#[pallet::weight(10_000)]
-		pub fn register_vac_type(origin: OriginFor<T>, value: Option<u32>) -> DispatchResult {
+		pub fn register_vac_type(origin: OriginFor<T>) -> DispatchResult {
 
 			let manufacture = ensure_signed(origin)?;
 
@@ -390,7 +381,7 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, traits::{Currency, tokens::
 
 			// create vaccine type information
 			let vac_type_id = VaccineTypeCount::<T>::get();
-			let vac_type = VaccineTypeInfo {vac_type_id: Some(vac_type_id), vac_value: value};
+			let vac_type = VaccineTypeInfo {vac_type_id: Some(vac_type_id)};
 			// TODO: Not safe math
 			<VaccineTypeCount<T>>::put(vac_type_id + 1);
 
@@ -398,7 +389,7 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, traits::{Currency, tokens::
 			<VaccineType<T>>::insert(&vac_type_id, vac_type);
 
 			// Emit an event.
-			Self::deposit_event(Event::RegisterVaccineType(vac_type_id, value.unwrap()));
+			Self::deposit_event(Event::RegisterVaccineType(vac_type_id));
 			// Return a successful DispatchResultWithPostInfo
 			Ok(())
 		}
@@ -422,7 +413,8 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, traits::{Currency, tokens::
 					let vac_info = VaccineInfo::<AccountIdOf<T>, BoundedVec<AccountIdOf<T>, T::MaxListSize>>{
 						vac_id: Some(vac_id),
 						manufacture_id: Some(manufacture.clone()),
-						owner_list: Default::default(),
+						owner_id: Some(manufacture),
+						buyer_id: None,
 						vao_list: Default::default(),
 						buy_confirm: false,
 						vac_type_id,
@@ -449,85 +441,89 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, traits::{Currency, tokens::
 		}
 
 		#[pallet::weight(10_000)]
-		pub fn request_buy(origin: OriginFor<T>, vac_id: Option<u32>, target_id: T::AccountId) -> DispatchResult {
-			let buyer = ensure_signed(origin)?;
+		pub fn transfer_vaccine(origin: OriginFor<T>, vac_id: Option<u32>, buyer_id: T::AccountId) -> DispatchResult {
 
-			// only manufacture
-			ensure!(Self::vm(target_id), Error::<T>::NotManufacture);
-			// confirm exist vaccine
-			ensure!(<Vaccines<T>>::contains_key(vac_id.unwrap()), Error::<T>::NotRegisteredVaccine);
+			let sender = ensure_signed(origin)?;
 
-			// register storage
-			<WantToBuy<T>>::insert(buyer, vac_id.unwrap());
-
-			// Emit an event.
-			Self::deposit_event(Event::RequestVaccine(vac_id.unwrap()));
-
-			Ok(())
-		}
-
-		#[pallet::weight(10_000)]
-		pub fn sell_vaccine(origin: OriginFor<T>, vac_id: Option<u32>, buyer_id: T::AccountId) -> DispatchResult {
-
-			let seller = ensure_signed(origin)?;
-
-			// only manufacture
-			ensure!(Self::vm(seller), Error::<T>::NotManufacture);
+			// only manufacture or distributer
+			ensure!(Self::vm(&sender) || Self::vad(&sender), Error::<T>::NotManufacture);
 
 			// confirm exist vaccine
 			ensure!(<Vaccines<T>>::contains_key(vac_id.unwrap()), Error::<T>::NotRegisteredVaccine);
 
-			// 買いたい人に売る。買う人はそれを承認して買う
-			// 買いたいか確認
-			ensure!(Self::want_to_buy(&buyer_id) == vac_id, Error::<T>::NotWantToBuy);
-			// 売る関数（ストレージの更新）
-			// Update storage.
-			<BuyableVaccine<T>>::insert(&buyer_id, vac_id.unwrap());
-			<WantToBuy<T>>::remove(&buyer_id);
+			// confirm buyer is not me
+			ensure!(sender != buyer_id, Error::<T>::BuyByYourself);
 
+			// vaccine info のownerがsenderか確認
+			let vac_info = <Vaccines<T>>::get(vac_id.unwrap()).unwrap();
+			let owner_id = vac_info.owner_id.unwrap();
+			ensure!(owner_id == sender, Error::<T>::NotVaccineOwner);
+
+			// 送る structとstorageの更新
+			let mut new_vac_info = <Vaccines<T>>::get(vac_id.unwrap()).unwrap();
+			new_vac_info.buyer_id = Some(buyer_id);
+			new_vac_info.buy_confirm = false;
+			<Vaccines<T>>::insert(vac_id.unwrap(), new_vac_info);
+			
 			// Emit an event.
-			Self::deposit_event(Event::SellVaccine(vac_id.unwrap()));
+			Self::deposit_event(Event::TransferVaccine(vac_id.unwrap()));
 			// Return a successful DispatchResultWithPostInfo
 			Ok(())
 		}
 
 		#[pallet::weight(10_000)]
-		pub fn buy_vaccine(origin: OriginFor<T>, vac_id: Option<u32>, seller: T::AccountId) -> DispatchResult {
-			let buyer = ensure_signed(origin)?;
+		pub fn receive_vaccine(origin: OriginFor<T>, vac_id: Option<u32>, sender: T::AccountId) -> DispatchResult {
+			let receiver = ensure_signed(origin)?;
 
-			// only approved buyer
-			ensure!(Self::buyable_vaccine(&buyer) == vac_id, Error::<T>::NotApproved);
 			// confirm exist vaccine
 			ensure!(<Vaccines<T>>::contains_key(vac_id.unwrap()), Error::<T>::NotRegisteredVaccine);
-			// TODO: cofirm seller has buyable vac_id vaccine
 
-			// register storage
-			<BuyableVaccine<T>>::remove(&buyer);
-			// update vaccine info
+			// only specified receiver
 			let vac_info = <Vaccines<T>>::get(vac_id.unwrap()).unwrap();
-			let type_id = vac_info.vac_type_id.unwrap();
-			let bid_price = <VaccineType<T>>::get(type_id).unwrap().vac_value.unwrap();
+			let buyer_id = vac_info.buyer_id.unwrap();
+			ensure!(receiver == buyer_id, Error::<T>::NotVaccineBuyer);
+			
 
-			let mut new_vac_info = vac_info.clone();
-			new_vac_info.owner_list.try_push(buyer.clone());
+			// update struct and storage 
+			let mut new_vac_info = <Vaccines<T>>::get(vac_id.unwrap()).unwrap();
+			new_vac_info.owner_id = Some(receiver.clone());
+			match new_vac_info.buyer_id == new_vac_info.owner_id && new_vac_info.buy_confirm == false {
+				true => new_vac_info.buy_confirm = true,
+				false => return Err(Error::<T>::NotVaccineTransfered)?
+			}
 			<Vaccines<T>>::insert(vac_id.unwrap(), new_vac_info);
-			// pay a fee
-			// TODO: configure fee of vaccine
-			// Check the buyer has enough free balance
-			ensure!(T::Currency::free_balance(&buyer) >= bid_price.into(), <Error<T>>::NotEnoughBalance);
-			T::Currency::transfer(&buyer, &seller, bid_price.into(), ExistenceRequirement::KeepAlive)?;
 
 			// Emit an event.
-			Self::deposit_event(Event::BuyVaccine(buyer, seller, vac_id.unwrap(), bid_price.into()));
+			Self::deposit_event(Event::ReceiveVaccine(receiver, sender, vac_id.unwrap()));
 
+			Ok(())
+		}
+
+		#[pallet::weight(10_000)]
+		pub fn approve_vaccine(origin: OriginFor<T>, vac_id: Option<u32>) -> DispatchResult {
+
+			let organization = ensure_signed(origin)?;
+
+			// only approved organization
+			ensure!(Self::vao(&organization), Error::<T>::NotOrganization);
+			// confirm exist vaccine
+			ensure!(<Vaccines<T>>::contains_key(vac_id.unwrap()), Error::<T>::NotRegisteredVaccine);
+			//TODO: confirm dont double approve by one organization
+
+			// upddate struct(vao list)
+			let mut vac_info = <Vaccines<T>>::get(vac_id.unwrap()).unwrap();
+			vac_info.vao_list.try_push(organization.clone());
+			// Update storage.
+			<Vaccines<T>>::insert(&vac_id.unwrap(), vac_info);
+
+			// Emit an event.
+			Self::deposit_event(Event::VaccineApproved(vac_id.unwrap(), organization));
+			// Return a successful DispatchResultWithPostInfo
 			Ok(())
 		}
 	}
 /*----------------------------------------------helper function ------------------------------------------------- */
 	impl<T: Config> Pallet<T> {
 
-		pub fn transfer_vaccine() {
-
-		}
 	}
 }
