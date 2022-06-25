@@ -16,7 +16,7 @@ mod benchmarking;
 
 #[frame_support::pallet]
 pub mod pallet {
-use frame_support::{pallet_prelude::{*, ValueQuery}};
+use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult};
 	use frame_system::pallet_prelude::*;
 	use sp_std::vec::Vec;
 	use scale_info::TypeInfo;
@@ -54,6 +54,13 @@ use frame_support::{pallet_prelude::{*, ValueQuery}};
 		// true -> buy, false -> not buy
 		pub buy_confirm: bool,
 		pub vac_type_id: Option<u32>,
+	}
+
+	#[derive(Decode, Encode, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo, Default, MaxEncodedLen)]
+	#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+	pub struct PassportInfo<Account, BoundedIndexList> {
+		pub user_id: Option<Account>,
+		pub vac_list: BoundedIndexList,
 	}
 
 	#[pallet::pallet]
@@ -123,6 +130,13 @@ use frame_support::{pallet_prelude::{*, ValueQuery}};
 	#[pallet::getter(fn vaccine_count)]
 	pub type VaccineCount<T: Config> = StorageValue<_, VaccineIndex, ValueQuery, InitialVaccineCount<T>>;
 
+	#[pallet::storage]
+	#[pallet::getter(fn vaccine_passports)]
+	pub type VaccinePassports<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, PassportInfo<AccountIdOf<T>, BoundedVec<u32, T::MaxListSize>>, OptionQuery>;
+
+	#[pallet::storage]
+	#[pallet::getter(fn used_vaccine)]
+	pub type UsedVaccine<T: Config> = StorageMap<_, Blake2_128Concat, u32, bool, ValueQuery>;
 
 	#[pallet::genesis_config]
 	pub struct GenesisConfig<T: Config> {
@@ -157,6 +171,7 @@ use frame_support::{pallet_prelude::{*, ValueQuery}};
 		TransferVaccine(u32),
 		ReceiveVaccine(T::AccountId, T::AccountId, u32),
 		VaccineApproved(u32, T::AccountId),
+		HadVaccination(u32, T::AccountId),
 	}
 
 	// Errors inform users that something went wrong.
@@ -175,6 +190,8 @@ use frame_support::{pallet_prelude::{*, ValueQuery}};
 		NotVaccineBuyer,
 		BuyByYourself,
 		NotVaccineTransfered,
+		VaccineWillTransfer,
+		VaccineAlreadyUsed,
 	}
 
 	#[pallet::call]
@@ -401,7 +418,7 @@ use frame_support::{pallet_prelude::{*, ValueQuery}};
 
 			// only manufacture
 			ensure!(Self::vm(&manufacture), Error::<T>::NotManufacture);
-			// confirm exist vaccine
+			// confirm exist vaccine type
 			ensure!(<VaccineType<T>>::contains_key(vac_type_id.unwrap()), Error::<T>::NotRegisteredVaccineType);
 
 			let vac_id = VaccineCount::<T>::get();
@@ -451,6 +468,9 @@ use frame_support::{pallet_prelude::{*, ValueQuery}};
 			// confirm exist vaccine
 			ensure!(<Vaccines<T>>::contains_key(vac_id.unwrap()), Error::<T>::NotRegisteredVaccine);
 
+			// confirm vaccine not used
+			ensure!(!<UsedVaccine<T>>::get(&vac_id.unwrap()), Error::<T>::VaccineAlreadyUsed);
+
 			// confirm buyer is not me
 			ensure!(sender != buyer_id, Error::<T>::BuyByYourself);
 
@@ -477,6 +497,9 @@ use frame_support::{pallet_prelude::{*, ValueQuery}};
 
 			// confirm exist vaccine
 			ensure!(<Vaccines<T>>::contains_key(vac_id.unwrap()), Error::<T>::NotRegisteredVaccine);
+
+			// confirm vaccine not used
+			ensure!(!<UsedVaccine<T>>::get(&vac_id.unwrap()), Error::<T>::VaccineAlreadyUsed);
 
 			// only specified receiver
 			let vac_info = <Vaccines<T>>::get(vac_id.unwrap()).unwrap();
@@ -508,6 +531,8 @@ use frame_support::{pallet_prelude::{*, ValueQuery}};
 			ensure!(Self::vao(&organization), Error::<T>::NotOrganization);
 			// confirm exist vaccine
 			ensure!(<Vaccines<T>>::contains_key(vac_id.unwrap()), Error::<T>::NotRegisteredVaccine);
+			// confirm vaccine not used
+			ensure!(!<UsedVaccine<T>>::get(&vac_id.unwrap()), Error::<T>::VaccineAlreadyUsed);
 			//TODO: confirm dont double approve by one organization
 
 			// upddate struct(vao list)
@@ -521,9 +546,66 @@ use frame_support::{pallet_prelude::{*, ValueQuery}};
 			// Return a successful DispatchResultWithPostInfo
 			Ok(())
 		}
+
+		#[pallet::weight(10_000)]
+		pub fn confirm_vaccine(origin: OriginFor<T>, vac_id: Option<u32>, vac_owner: Option<T::AccountId>) -> DispatchResult {
+
+			let user = ensure_signed(origin)?;
+
+			// confirm exist vaccine
+			ensure!(<Vaccines<T>>::contains_key(vac_id.unwrap()), Error::<T>::NotRegisteredVaccine);
+			// confirm vaccine not used
+			ensure!(!<UsedVaccine<T>>::get(&vac_id.unwrap()), Error::<T>::VaccineAlreadyUsed);
+			// confirm vaccine owner
+			let owner = <Vaccines<T>>::get(vac_id.unwrap()).unwrap().owner_id;
+			let confirmation = <Vaccines<T>>::get(vac_id.unwrap()).unwrap().buy_confirm;
+			// confirm vaccine will not transfer
+			ensure!(confirmation, Error::<T>::VaccineWillTransfer);
+			ensure!(owner == vac_owner, Error::<T>::NotVaccineOwner);
+
+			// register vaccine is used
+			<UsedVaccine<T>>::insert(&vac_id.unwrap(), true);
+
+			// issuing vaccine pasport
+			Self::register_vac_pass(user.clone(), vac_id);
+
+
+			// Emit an event.
+			Self::deposit_event(Event::HadVaccination(vac_id.unwrap(), user));
+			// Return a successful DispatchResultWithPostInfo
+			Ok(())
+		}
 	}
 /*----------------------------------------------helper function ------------------------------------------------- */
 	impl<T: Config> Pallet<T> {
 
+
+		pub fn register_vac_pass(registrant: T::AccountId, vac_id: Option<u32>) -> DispatchResult {
+			match VaccinePassports::<T>::try_get(&registrant){
+
+				Ok(_) => {
+				},
+				Err(_) => {
+					let vac_pass = PassportInfo::<AccountIdOf<T>, BoundedVec<u32, T::MaxListSize>>{
+						user_id: Some(registrant.clone()),
+						vac_list: Default::default(),
+					};
+
+					// Update storage.     
+					<VaccinePassports<T>>::insert(&registrant, vac_pass);
+				}
+
+
+			};
+			// register vaccine list
+			let mut passport = Self::vaccine_passports(&registrant).unwrap();
+			passport.vac_list.try_push(vac_id.unwrap());
+
+			// Update storage.     
+			<VaccinePassports<T>>::insert(&registrant, passport);
+
+
+			Ok(())
+		}
 	}
 }
