@@ -54,6 +54,8 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult};
 		// true -> buy, false -> not buy
 		pub buy_confirm: bool,
 		pub vac_type_id: Option<u32>,
+		pub max_inoculations_number: u32,
+		pub inoculation_count: u32,
 	}
 
 	#[derive(Decode, Encode, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo, Default, MaxEncodedLen)]
@@ -61,6 +63,7 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult};
 	pub struct PassportInfo<Account, BoundedIndexList> {
 		pub user_id: Option<Account>,
 		pub vac_list: BoundedIndexList,
+		pub inoculation_count: u32,
 	}
 
 	#[pallet::pallet]
@@ -68,6 +71,7 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult};
 	pub struct Pallet<T>(_);
 
 
+	// only claim role account
 	#[pallet::storage]
 	#[pallet::getter(fn pending_gov)]
 	pub type PendingGOV<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, bool, ValueQuery>;
@@ -88,6 +92,8 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult};
 	#[pallet::getter(fn pending_vad)]
 	pub type PendingVAD<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, bool, ValueQuery>;
 
+
+	// approved account
 	#[pallet::storage]
 	#[pallet::getter(fn gov)]
 	pub type GOV<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, bool, ValueQuery>;
@@ -112,6 +118,7 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult};
 	#[pallet::getter(fn vaccine_type)]
 	pub type VaccineType<T: Config> = StorageMap<_, Blake2_128Concat, u32, VaccineTypeInfo, OptionQuery>;
 
+	// vaccine ID => VaccineInfo struct
 	#[pallet::storage]
 	#[pallet::getter(fn vaccines)]
 	pub type Vaccines<T: Config> = StorageMap<_, Blake2_128Concat, u32, VaccineInfo<AccountIdOf<T>, BoundedVec<AccountIdOf<T>, T::MaxListSize>>, OptionQuery>;
@@ -119,6 +126,7 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult};
 	#[pallet::type_value]
 	pub fn InitialVaccineTypeCount<T: Config>() -> u32 { 1u32 }
 
+	// Vaccine type ID (initial value: 1)
 	#[pallet::storage]
 	#[pallet::getter(fn vaccine_type_count)]
 	pub type VaccineTypeCount<T: Config> = StorageValue<_, VaccineTypeIndex, ValueQuery, InitialVaccineTypeCount<T>>;
@@ -126,18 +134,22 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult};
 	#[pallet::type_value]
 	pub fn InitialVaccineCount<T: Config>() -> u32 { 1u32 }
 
+	// Vaccine ID(Initial Value: 1)
 	#[pallet::storage]
 	#[pallet::getter(fn vaccine_count)]
 	pub type VaccineCount<T: Config> = StorageValue<_, VaccineIndex, ValueQuery, InitialVaccineCount<T>>;
 
+	// Account ID => PassportInfo struct
 	#[pallet::storage]
 	#[pallet::getter(fn vaccine_passports)]
 	pub type VaccinePassports<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, PassportInfo<AccountIdOf<T>, BoundedVec<u32, T::MaxListSize>>, OptionQuery>;
 
+	// (Vaccine ID, Account ID) => true/false(true: used)
 	#[pallet::storage]
 	#[pallet::getter(fn used_vaccine)]
-	pub type UsedVaccine<T: Config> = StorageMap<_, Blake2_128Concat, u32, bool, ValueQuery>;
+	pub type UsedVaccine<T: Config> = StorageDoubleMap<_, Blake2_128Concat, u32, Blake2_128Concat, T::AccountId, bool, ValueQuery>;
 
+	// Alice is sysman by default
 	#[pallet::genesis_config]
 	pub struct GenesisConfig<T: Config> {
 		pub genesis_account: Vec<T::AccountId>,
@@ -186,17 +198,20 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult};
 		NotRegisteredVaccineType,
 		NotRegisteredVaccine,
 		VaccineIsRegistered,
-		NotVaccineOwner,
+		WrongVaccineOwner,
 		NotVaccineBuyer,
 		BuyByYourself,
 		NotVaccineTransfered,
 		VaccineWillTransfer,
 		VaccineAlreadyUsed,
+		ExceedMaxShotNumber,
+		NotSendFinalTransfer,
 	}
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 
+/* -----------------------------------------------claim role function ----------------------------------------- */		
 		#[pallet::weight(10_000)]
 		pub fn claim_sys_man(origin: OriginFor<T>) -> DispatchResult {
 
@@ -281,8 +296,10 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult};
 			// Return a successful DispatchResultWithPostInfo
 			Ok(())
 		}
+	/* ----------------------------------------------------------------------------------------------------- */
 
 
+	/* -------------------------------- approve role function (executed by only sysman) ---------------------*/
 		#[pallet::weight(10_000)]
 		pub fn approve_sys_man(origin: OriginFor<T>, target: T::AccountId) -> DispatchResult {
 
@@ -387,14 +404,17 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult};
 			// Return a successful DispatchResultWithPostInfo
 			Ok(())
 		}
+	/* ----------------------------------------------------------------------------------------- */	
 
+		// register vaccine type by only sysman
+		// ex) Pfizer, Moderna ...
 		#[pallet::weight(10_000)]
 		pub fn register_vac_type(origin: OriginFor<T>) -> DispatchResult {
 
-			let manufacture = ensure_signed(origin)?;
+			let sysman = ensure_signed(origin)?;
 
 			// only manufacture
-			ensure!(Self::vm(manufacture), Error::<T>::NotManufacture);
+			ensure!(Self::sys_man(sysman), Error::<T>::NotManufacture);
 
 			// create vaccine type information
 			let vac_type_id = VaccineTypeCount::<T>::get();
@@ -411,6 +431,7 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult};
 			Ok(())
 		}
 
+		// register vaccine information by only manufacture
 		#[pallet::weight(10_000)]
 		pub fn register_vac_info(origin: OriginFor<T>, vac_type_id: Option<u32>) -> DispatchResult {
 
@@ -435,6 +456,8 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult};
 						vao_list: Default::default(),
 						buy_confirm: false,
 						vac_type_id,
+						max_inoculations_number: 8,
+						inoculation_count: 0,
 					};
 					// Update storage.     
 					//<VaccineCount<T>>::put(vac_id + 1);
@@ -457,6 +480,7 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult};
 			Ok(())
 		}
 
+		// transfer vaccine by only manufacture and distributer
 		#[pallet::weight(10_000)]
 		pub fn transfer_vaccine(origin: OriginFor<T>, vac_id: Option<u32>, buyer_id: T::AccountId) -> DispatchResult {
 
@@ -468,16 +492,16 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult};
 			// confirm exist vaccine
 			ensure!(<Vaccines<T>>::contains_key(vac_id.unwrap()), Error::<T>::NotRegisteredVaccine);
 
-			// confirm vaccine not used
-			ensure!(!<UsedVaccine<T>>::get(&vac_id.unwrap()), Error::<T>::VaccineAlreadyUsed);
-
 			// confirm buyer is not me
 			ensure!(sender != buyer_id, Error::<T>::BuyByYourself);
 
 			// vaccine info のownerがsenderか確認
 			let vac_info = <Vaccines<T>>::get(vac_id.unwrap()).unwrap();
 			let owner_id = vac_info.owner_id.unwrap();
-			ensure!(owner_id == sender, Error::<T>::NotVaccineOwner);
+			ensure!(owner_id == sender, Error::<T>::WrongVaccineOwner);
+			// confirm vaccine not used
+			let count = vac_info.inoculation_count;
+			ensure!(count == 0, Error::<T>::VaccineAlreadyUsed);
 
 			// 送る structとstorageの更新
 			let mut new_vac_info = <Vaccines<T>>::get(vac_id.unwrap()).unwrap();
@@ -491,6 +515,7 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult};
 			Ok(())
 		}
 
+		// receive vaccine by only manufacture and distributer
 		#[pallet::weight(10_000)]
 		pub fn receive_vaccine(origin: OriginFor<T>, vac_id: Option<u32>, sender: T::AccountId) -> DispatchResult {
 			let receiver = ensure_signed(origin)?;
@@ -498,14 +523,22 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult};
 			// confirm exist vaccine
 			ensure!(<Vaccines<T>>::contains_key(vac_id.unwrap()), Error::<T>::NotRegisteredVaccine);
 
-			// confirm vaccine not used
-			ensure!(!<UsedVaccine<T>>::get(&vac_id.unwrap()), Error::<T>::VaccineAlreadyUsed);
+			// only manufacture or distributer
+			ensure!(Self::vm(&receiver) || Self::vad(&receiver), Error::<T>::NotManufacture);
 
 			// only specified receiver
 			let vac_info = <Vaccines<T>>::get(vac_id.unwrap()).unwrap();
 			let buyer_id = vac_info.buyer_id.unwrap();
 			ensure!(receiver == buyer_id, Error::<T>::NotVaccineBuyer);
-			
+			// confirm vaccine not used
+			let count = vac_info.inoculation_count;
+			ensure!(count == 0, Error::<T>::VaccineAlreadyUsed);
+			// confirm vaccine will not transfer
+			let confirmation = <Vaccines<T>>::get(vac_id.unwrap()).unwrap().buy_confirm;
+			ensure!(!confirmation, Error::<T>::VaccineWillTransfer);
+			// confirm correct vaccine owner
+			let owner = <Vaccines<T>>::get(vac_id.unwrap()).unwrap().owner_id.unwrap();
+			ensure!(owner == sender, Error::<T>::WrongVaccineOwner);
 
 			// update struct and storage 
 			let mut new_vac_info = <Vaccines<T>>::get(vac_id.unwrap()).unwrap();
@@ -522,6 +555,7 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult};
 			Ok(())
 		}
 
+		// approve vaccine by only approved organization
 		#[pallet::weight(10_000)]
 		pub fn approve_vaccine(origin: OriginFor<T>, vac_id: Option<u32>) -> DispatchResult {
 
@@ -531,15 +565,18 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult};
 			ensure!(Self::vao(&organization), Error::<T>::NotOrganization);
 			// confirm exist vaccine
 			ensure!(<Vaccines<T>>::contains_key(vac_id.unwrap()), Error::<T>::NotRegisteredVaccine);
-			// confirm vaccine not used
-			ensure!(!<UsedVaccine<T>>::get(&vac_id.unwrap()), Error::<T>::VaccineAlreadyUsed);
 			//TODO: confirm dont double approve by one organization
 
+			// confirm vaccine not used
+			let vac_info = <Vaccines<T>>::get(vac_id.unwrap()).unwrap();
+			let count = vac_info.inoculation_count;
+			ensure!(count == 0, Error::<T>::VaccineAlreadyUsed);
+
 			// upddate struct(vao list)
-			let mut vac_info = <Vaccines<T>>::get(vac_id.unwrap()).unwrap();
-			vac_info.vao_list.try_push(organization.clone());
+			let mut new_vac_info = <Vaccines<T>>::get(vac_id.unwrap()).unwrap();
+			new_vac_info.vao_list.try_push(organization.clone());
 			// Update storage.
-			<Vaccines<T>>::insert(&vac_id.unwrap(), vac_info);
+			<Vaccines<T>>::insert(&vac_id.unwrap(), new_vac_info);
 
 			// Emit an event.
 			Self::deposit_event(Event::VaccineApproved(vac_id.unwrap(), organization));
@@ -547,28 +584,82 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult};
 			Ok(())
 		}
 
+		// finally transfer vaccine to user
+		#[pallet::weight(10_000)]
+		pub fn transfer_get_vaccine_right(origin: OriginFor<T>, vac_id: Option<u32>, user_id: T::AccountId) -> DispatchResult {
+
+			let sender = ensure_signed(origin)?;
+
+			// only manufacture or distributer
+			ensure!(Self::vm(&sender) || Self::vad(&sender), Error::<T>::NotManufacture);
+
+			// confirm exist vaccine
+			ensure!(<Vaccines<T>>::contains_key(vac_id.unwrap()), Error::<T>::NotRegisteredVaccine);
+
+			// confirm vaccine not duplicated used
+			ensure!(!<UsedVaccine<T>>::get(&vac_id.unwrap(), &user_id), Error::<T>::VaccineAlreadyUsed);
+
+			// confirm buyer is not me
+			ensure!(sender != user_id, Error::<T>::BuyByYourself);
+
+			// vaccine info のownerがsenderか確認
+			let vac_info = <Vaccines<T>>::get(vac_id.unwrap()).unwrap();
+			let owner_id = vac_info.owner_id.unwrap();
+			ensure!(owner_id == sender, Error::<T>::WrongVaccineOwner);
+
+			// 送る structとstorageの更新
+			let mut new_vac_info = <Vaccines<T>>::get(vac_id.unwrap()).unwrap();
+			new_vac_info.buyer_id = Some(user_id.clone());
+			new_vac_info.buy_confirm = false;
+			// confirm inoculation count dont reach max number
+			ensure!(new_vac_info.inoculation_count < new_vac_info.max_inoculations_number, Error::<T>::ExceedMaxShotNumber);
+			new_vac_info.inoculation_count += 1;
+			<Vaccines<T>>::insert(vac_id.unwrap(), new_vac_info);
+
+			// register vaccine is used
+			<UsedVaccine<T>>::insert(&vac_id.unwrap(), user_id, true);
+			
+			// Emit an event.
+			Self::deposit_event(Event::TransferVaccine(vac_id.unwrap()));
+			// Return a successful DispatchResultWithPostInfo
+			Ok(())
+		}
+
+		// user confirm vaccine
 		#[pallet::weight(10_000)]
 		pub fn confirm_vaccine(origin: OriginFor<T>, vac_id: Option<u32>, vac_owner: Option<T::AccountId>) -> DispatchResult {
 
 			let user = ensure_signed(origin)?;
 
+			// confirm send_final_transfer is sended to me?
+			ensure!(<UsedVaccine<T>>::get(&vac_id.unwrap(), &user), Error::<T>::NotSendFinalTransfer);
+
 			// confirm exist vaccine
 			ensure!(<Vaccines<T>>::contains_key(vac_id.unwrap()), Error::<T>::NotRegisteredVaccine);
-			// confirm vaccine not used
-			ensure!(!<UsedVaccine<T>>::get(&vac_id.unwrap()), Error::<T>::VaccineAlreadyUsed);
+
 			// confirm vaccine owner
 			let owner = <Vaccines<T>>::get(vac_id.unwrap()).unwrap().owner_id;
 			let confirmation = <Vaccines<T>>::get(vac_id.unwrap()).unwrap().buy_confirm;
+			// only specified receiver
+			let vac_info = <Vaccines<T>>::get(vac_id.unwrap()).unwrap();
+			let buyer_id = vac_info.buyer_id.unwrap();
+			ensure!(user == buyer_id, Error::<T>::NotVaccineBuyer);
 			// confirm vaccine will not transfer
-			ensure!(confirmation, Error::<T>::VaccineWillTransfer);
-			ensure!(owner == vac_owner, Error::<T>::NotVaccineOwner);
+			ensure!(!confirmation, Error::<T>::VaccineWillTransfer);
+			// confirm vaccine correct owner
+			ensure!(owner == vac_owner, Error::<T>::WrongVaccineOwner);
 
-			// register vaccine is used
-			<UsedVaccine<T>>::insert(&vac_id.unwrap(), true);
+			// update struct and storage 
+			let mut new_vac_info = <Vaccines<T>>::get(vac_id.unwrap()).unwrap();
+			new_vac_info.owner_id = Some(user.clone());
+			match new_vac_info.buyer_id == new_vac_info.owner_id && new_vac_info.buy_confirm == false {
+				true => new_vac_info.buy_confirm = true,
+				false => return Err(Error::<T>::NotVaccineTransfered)?
+			}
+			<Vaccines<T>>::insert(vac_id.unwrap(), new_vac_info);
 
-			// issuing vaccine pasport
+			// issuing vaccine passport
 			Self::register_vac_pass(user.clone(), vac_id);
-
 
 			// Emit an event.
 			Self::deposit_event(Event::HadVaccination(vac_id.unwrap(), user));
@@ -582,24 +673,24 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult};
 
 		pub fn register_vac_pass(registrant: T::AccountId, vac_id: Option<u32>) -> DispatchResult {
 			match VaccinePassports::<T>::try_get(&registrant){
-
 				Ok(_) => {
 				},
 				Err(_) => {
 					let vac_pass = PassportInfo::<AccountIdOf<T>, BoundedVec<u32, T::MaxListSize>>{
 						user_id: Some(registrant.clone()),
 						vac_list: Default::default(),
+						inoculation_count: 0,
 					};
 
 					// Update storage.     
 					<VaccinePassports<T>>::insert(&registrant, vac_pass);
 				}
-
-
 			};
+
 			// register vaccine list
 			let mut passport = Self::vaccine_passports(&registrant).unwrap();
 			passport.vac_list.try_push(vac_id.unwrap());
+			passport.inoculation_count += 1;
 
 			// Update storage.     
 			<VaccinePassports<T>>::insert(&registrant, passport);
