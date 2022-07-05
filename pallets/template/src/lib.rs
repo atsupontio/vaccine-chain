@@ -482,7 +482,7 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult};
 
 		// transfer vaccine by only manufacture and distributer
 		#[pallet::weight(10_000)]
-		pub fn transfer_vaccine(origin: OriginFor<T>, vac_id: Option<u32>, buyer_id: T::AccountId) -> DispatchResult {
+		pub fn transfer_vaccine(origin: OriginFor<T>, buyer_id: T::AccountId, vac_id: Option<u32>) -> DispatchResult {
 
 			let sender = ensure_signed(origin)?;
 
@@ -517,7 +517,7 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult};
 
 		// receive vaccine by only manufacture and distributer
 		#[pallet::weight(10_000)]
-		pub fn receive_vaccine(origin: OriginFor<T>, vac_id: Option<u32>, sender: T::AccountId) -> DispatchResult {
+		pub fn receive_vaccine(origin: OriginFor<T>, sender: T::AccountId, vac_id: Option<u32>) -> DispatchResult {
 			let receiver = ensure_signed(origin)?;
 
 			// confirm exist vaccine
@@ -586,7 +586,7 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult};
 
 		// finally transfer vaccine to user
 		#[pallet::weight(10_000)]
-		pub fn transfer_get_vaccine_right(origin: OriginFor<T>, vac_id: Option<u32>, user_id: T::AccountId) -> DispatchResult {
+		pub fn transfer_get_vaccine_right(origin: OriginFor<T>, user_id: T::AccountId, vac_id: Option<u32>) -> DispatchResult {
 
 			let sender = ensure_signed(origin)?;
 
@@ -627,7 +627,7 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult};
 
 		// user confirm vaccine
 		#[pallet::weight(10_000)]
-		pub fn confirm_vaccine(origin: OriginFor<T>, vac_id: Option<u32>, vac_owner: Option<T::AccountId>) -> DispatchResult {
+		pub fn confirm_vaccine(origin: OriginFor<T>, vac_owner: Option<T::AccountId>,  vac_id: Option<u32>) -> DispatchResult {
 
 			let user = ensure_signed(origin)?;
 

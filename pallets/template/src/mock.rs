@@ -1,5 +1,6 @@
 use crate as pallet_template;
-use frame_support::traits::{ConstU16, ConstU64};
+// use crate as pallet_balances;
+use frame_support::traits::{GenesisBuild, ConstU16, ConstU32, ConstU64};
 use frame_system as system;
 use sp_core::H256;
 use sp_runtime::{
@@ -18,6 +19,7 @@ frame_support::construct_runtime!(
 		UncheckedExtrinsic = UncheckedExtrinsic,
 	{
 		System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
+		Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
 		TemplateModule: pallet_template::{Pallet, Call, Storage, Event<T>},
 	}
 );
@@ -40,7 +42,7 @@ impl system::Config for Test {
 	type BlockHashCount = ConstU64<250>;
 	type Version = ();
 	type PalletInfo = PalletInfo;
-	type AccountData = ();
+	type AccountData = pallet_balances::AccountData<u64>;
 	type OnNewAccount = ();
 	type OnKilledAccount = ();
 	type SystemWeightInfo = ();
@@ -49,8 +51,68 @@ impl system::Config for Test {
 	type MaxConsumers = frame_support::traits::ConstU32<16>;
 }
 
+
+impl pallet_balances::Config for Test {
+	type MaxLocks = ConstU32<50>;
+	type MaxReserves = ();
+	type ReserveIdentifier = [u8; 8];
+	type Balance = u64;
+	type Event = Event;
+	type DustRemoval = ();
+	type ExistentialDeposit = ConstU64<500>;
+	type AccountStore = System;
+	type WeightInfo = ();
+}
+
 impl pallet_template::Config for Test {
 	type Event = Event;
+	type MaxListSize = ConstU32<30>;
+}
+
+pub struct ExtBuilder;
+
+impl ExtBuilder {
+	pub fn build(self) -> sp_io::TestExternalities {
+	 let mut t = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
+	 pallet_balances::GenesisConfig::<Test> {
+	  balances: vec![
+	   (1, 1000000000000000),
+	   (2, 2000000000000000),
+	   (3, 3000000000000000),
+	   (4, 4000000000000000),
+	   (5, 5000000000000000),
+	   (6, 6000000000000000)
+	  ],
+	 }
+	  .assimilate_storage(&mut t)
+	  .unwrap();
+
+   
+	 let mut ext = sp_io::TestExternalities::new(t);
+	 ext.execute_with(|| System::set_block_number(1));
+	 ext
+	}
+
+	pub fn set_genesis_account(self) -> sp_io::TestExternalities {
+		let mut t = pallet_template::GenesisConfig::<Test>::default().build_storage().unwrap();
+	  pallet_template::GenesisConfig::<Test> {
+		genesis_account: vec![
+		 1
+		],
+	   }
+		.assimilate_storage(&mut t)
+		.unwrap();
+	   
+		let mut ext = sp_io::TestExternalities::new(t);
+	 	ext.execute_with(|| System::set_block_number(1));
+	 	ext
+	}
+}
+
+impl Default for ExtBuilder {
+    fn default() -> Self {
+		Self
+    }
 }
 
 // Build genesis storage according to the mock runtime.
