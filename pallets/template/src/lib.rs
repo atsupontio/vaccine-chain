@@ -21,6 +21,8 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult};
 	use sp_std::vec::Vec;
 	use scale_info::TypeInfo;
 	use serde::{Deserialize, Serialize};
+	use frame_support::traits::UnixTime;
+	use sp_runtime::traits::SaturatedConversion;
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
@@ -28,6 +30,7 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult};
 		/// Because this pallet emits events, it depends on the runtime's definition of an event.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 		type MaxListSize: Get<u32>;
+		type UnixTime: UnixTime;
 	}
 
 	type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
@@ -56,6 +59,7 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult};
 		pub vac_type_id: Option<u32>,
 		pub max_inoculations_number: u32,
 		pub inoculation_count: u32,
+		pub approved_time: Option<u64>,
 	}
 
 	#[derive(Decode, Encode, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo, Default, MaxEncodedLen)]
@@ -458,6 +462,7 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult};
 						vac_type_id,
 						max_inoculations_number: 8,
 						inoculation_count: 0,
+						approved_time: None,
 					};
 					// Update storage.     
 					//<VaccineCount<T>>::put(vac_id + 1);

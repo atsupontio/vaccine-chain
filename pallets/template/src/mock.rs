@@ -7,6 +7,7 @@ use sp_runtime::{
 	testing::Header,
 	traits::{BlakeTwo256, IdentityLookup},
 };
+use frame_support::parameter_types;
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -67,7 +68,20 @@ impl pallet_balances::Config for Test {
 impl pallet_template::Config for Test {
 	type Event = Event;
 	type MaxListSize = ConstU32<30>;
+	type UnixTime = pallet_timestamp::Pallet<Self>;
 }
+
+parameter_types! {
+	pub const MinimumPeriod: u64 = 5;
+}
+
+impl pallet_timestamp::Config for Test {
+	type Moment = u64;
+	type OnTimestampSet = ();
+	type MinimumPeriod = MinimumPeriod;
+	type WeightInfo = ();
+}
+
 
 pub struct ExtBuilder;
 
