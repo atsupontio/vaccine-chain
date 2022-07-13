@@ -200,9 +200,10 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult};
 		VaccineIsRegistered,
 		WrongVaccineOwner,
 		NotVaccineBuyer,
-		BuyByYourself,
+		TransferByMyself,
 		NotVaccineTransfered,
 		VaccineWillTransfer,
+		VaccineAlreadyMine,
 		VaccineAlreadyUsed,
 		ExceedMaxShotNumber,
 		NotSendFinalTransfer,
@@ -414,7 +415,7 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult};
 			let sysman = ensure_signed(origin)?;
 
 			// only manufacture
-			ensure!(Self::sys_man(sysman), Error::<T>::NotManufacture);
+			ensure!(Self::sys_man(sysman), Error::<T>::NotSysMan);
 
 			// create vaccine type information
 			let vac_type_id = VaccineTypeCount::<T>::get();
@@ -493,7 +494,7 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult};
 			ensure!(<Vaccines<T>>::contains_key(vac_id.unwrap()), Error::<T>::NotRegisteredVaccine);
 
 			// confirm buyer is not me
-			ensure!(sender != buyer_id, Error::<T>::BuyByYourself);
+			ensure!(sender != buyer_id, Error::<T>::TransferByMyself);
 
 			// vaccine info のownerがsenderか確認
 			let vac_info = <Vaccines<T>>::get(vac_id.unwrap()).unwrap();
@@ -535,7 +536,7 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult};
 			ensure!(count == 0, Error::<T>::VaccineAlreadyUsed);
 			// confirm vaccine will not transfer
 			let confirmation = <Vaccines<T>>::get(vac_id.unwrap()).unwrap().buy_confirm;
-			ensure!(!confirmation, Error::<T>::VaccineWillTransfer);
+			ensure!(!confirmation, Error::<T>::VaccineAlreadyMine);
 			// confirm correct vaccine owner
 			let owner = <Vaccines<T>>::get(vac_id.unwrap()).unwrap().owner_id.unwrap();
 			ensure!(owner == sender, Error::<T>::WrongVaccineOwner);
@@ -543,10 +544,8 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult};
 			// update struct and storage 
 			let mut new_vac_info = <Vaccines<T>>::get(vac_id.unwrap()).unwrap();
 			new_vac_info.owner_id = Some(receiver.clone());
-			match new_vac_info.buyer_id == new_vac_info.owner_id && new_vac_info.buy_confirm == false {
-				true => new_vac_info.buy_confirm = true,
-				false => return Err(Error::<T>::NotVaccineTransfered)?
-			}
+			new_vac_info.buy_confirm = true;
+			
 			<Vaccines<T>>::insert(vac_id.unwrap(), new_vac_info);
 
 			// Emit an event.
@@ -600,7 +599,7 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult};
 			ensure!(!<UsedVaccine<T>>::get(&vac_id.unwrap(), &user_id), Error::<T>::VaccineAlreadyUsed);
 
 			// confirm buyer is not me
-			ensure!(sender != user_id, Error::<T>::BuyByYourself);
+			ensure!(sender != user_id, Error::<T>::TransferByMyself);
 
 			// vaccine info のownerがsenderか確認
 			let vac_info = <Vaccines<T>>::get(vac_id.unwrap()).unwrap();
@@ -631,9 +630,6 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult};
 
 			let user = ensure_signed(origin)?;
 
-			// confirm send_final_transfer is sended to me?
-			ensure!(<UsedVaccine<T>>::get(&vac_id.unwrap(), &user), Error::<T>::NotSendFinalTransfer);
-
 			// confirm exist vaccine
 			ensure!(<Vaccines<T>>::contains_key(vac_id.unwrap()), Error::<T>::NotRegisteredVaccine);
 
@@ -645,17 +641,17 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult};
 			let buyer_id = vac_info.buyer_id.unwrap();
 			ensure!(user == buyer_id, Error::<T>::NotVaccineBuyer);
 			// confirm vaccine will not transfer
-			ensure!(!confirmation, Error::<T>::VaccineWillTransfer);
+			ensure!(!confirmation, Error::<T>::VaccineAlreadyMine);
 			// confirm vaccine correct owner
 			ensure!(owner == vac_owner, Error::<T>::WrongVaccineOwner);
+
+			// confirm send_final_transfer is sended to me?
+			ensure!(<UsedVaccine<T>>::get(&vac_id.unwrap(), &user), Error::<T>::NotSendFinalTransfer);
 
 			// update struct and storage 
 			let mut new_vac_info = <Vaccines<T>>::get(vac_id.unwrap()).unwrap();
 			new_vac_info.owner_id = Some(user.clone());
-			match new_vac_info.buyer_id == new_vac_info.owner_id && new_vac_info.buy_confirm == false {
-				true => new_vac_info.buy_confirm = true,
-				false => return Err(Error::<T>::NotVaccineTransfered)?
-			}
+			new_vac_info.buy_confirm = true;
 			<Vaccines<T>>::insert(vac_id.unwrap(), new_vac_info);
 
 			// issuing vaccine passport

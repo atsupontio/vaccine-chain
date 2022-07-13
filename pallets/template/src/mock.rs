@@ -66,7 +66,7 @@ impl pallet_balances::Config for Test {
 
 impl pallet_template::Config for Test {
 	type Event = Event;
-	type MaxListSize = ConstU32<30>;
+	type MaxListSize = ConstU32<3>;
 }
 
 pub struct ExtBuilder;
