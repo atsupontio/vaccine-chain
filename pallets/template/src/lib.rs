@@ -16,11 +16,12 @@ mod benchmarking;
 
 #[frame_support::pallet]
 pub mod pallet {
-use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult};
+use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult, traits::UnixTime};
 	use frame_system::pallet_prelude::*;
 	use sp_std::vec::Vec;
 	use scale_info::TypeInfo;
 	use serde::{Deserialize, Serialize};
+	use sp_runtime::traits::SaturatedConversion;
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
@@ -28,6 +29,7 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult};
 		/// Because this pallet emits events, it depends on the runtime's definition of an event.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 		type MaxListSize: Get<u32>;
+		type UnixTime: UnixTime;
 	}
 
 	type AccountIdOf<T> = <T as frame_system::Config>::AccountId;

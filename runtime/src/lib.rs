@@ -265,6 +265,7 @@ impl pallet_sudo::Config for Runtime {
 impl pallet_template::Config for Runtime {
 	type Event = Event;
 	type MaxListSize = ConstU32<30>;
+	type UnixTime = pallet_timestamp::Pallet<Self>;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
