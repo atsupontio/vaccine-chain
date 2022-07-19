@@ -156,9 +156,9 @@ use frame_support::{pallet_prelude::{*, ValueQuery, OptionQuery}, dispatch::Disp
 
 			let claimer = ensure_signed(origin)?;
 
-			Self::check_claim_account(&claimer, role);
+			Self::check_claim_account(&claimer, &role);
 
-			let mut account = <Accounts<T>>::get(claimer).unwrap();
+			let mut account = <Accounts<T>>::get(&claimer).unwrap();
 			account.status = RoleStatus::Pending;
 			account.role = role;
 			// Update storage.
@@ -184,7 +184,7 @@ use frame_support::{pallet_prelude::{*, ValueQuery, OptionQuery}, dispatch::Disp
 
 			Self::check_approve_account(&target, role);
 
-			let mut account = <Accounts<T>>::get(target).unwrap();
+			let mut account = <Accounts<T>>::get(&target).unwrap();
 			account.status = RoleStatus::Approved;
 
 			// Update storage.
@@ -245,6 +245,29 @@ use frame_support::{pallet_prelude::{*, ValueQuery, OptionQuery}, dispatch::Disp
 			let account = <Accounts<T>>::get(who).unwrap();
 			match account.role {
 				role => {
+					match account.status {
+						RoleStatus::Approved => return Ok(()),
+						RoleStatus::Revoked => Err(Error::<T>::AlreadyRevoked)?,
+						RoleStatus::Pending => Err(Error::<T>::NotApproved)?,
+						RoleStatus::None => Err(Error::<T>::NotClaimed)?,
+					}
+				},
+				_ => Err(Error::<T>::WrongRole)?,
+			}
+		}
+
+		pub fn check_union(who: &T::AccountId, role1: Role, role2: Role) -> DispatchResult {
+			let account = <Accounts<T>>::get(who).unwrap();
+			match account.role {
+				role1 => {
+					match account.status {
+						RoleStatus::Approved => return Ok(()),
+						RoleStatus::Revoked => Err(Error::<T>::AlreadyRevoked)?,
+						RoleStatus::Pending => Err(Error::<T>::NotApproved)?,
+						RoleStatus::None => Err(Error::<T>::NotClaimed)?,
+					}
+				},
+				role2 => {
 					match account.status {
 						RoleStatus::Approved => return Ok(()),
 						RoleStatus::Revoked => Err(Error::<T>::AlreadyRevoked)?,

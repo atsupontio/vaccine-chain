@@ -31,13 +31,14 @@ use frame_support::{pallet_prelude::{*, ValueQuery, OptionQuery}, dispatch::Disp
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 		type MaxListSize: Get<u32>;
 		type UnixTime: UnixTime;
-		type Account: Account<Self::AccountId>;
+		type AccountInfo: AccountPallet<Self::AccountId>;
 	}
 
-	pub trait AccountPallet<AccountId> {
-		fn check_claim_account(claimer: AccountId, role: Role) -> DispatchResult;
-		fn check_account(who: AccountId, role: Role) -> DispatchResult;
-		fn check_approve_account(claimer: AccountId, role: Role) -> DispatchResult;
+	pub trait AccountPallet<AccountId>{
+		fn check_claim_account(claimer: &AccountId, role: Role) -> DispatchResult;
+		fn check_account(who: &AccountId, role: Role) -> DispatchResult;
+		fn check_union(who: &AccountId, role1: Role, role2: Role) -> DispatchResult;
+		fn check_approve_account(claimer: &AccountId, role: Role) -> DispatchResult;
 	}
 
 	type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
@@ -81,23 +82,11 @@ use frame_support::{pallet_prelude::{*, ValueQuery, OptionQuery}, dispatch::Disp
 	#[pallet::generate_store(pub(super) trait Store)]
 	pub struct Pallet<T>(_);
 
-
-	#[pallet::storage]
-	#[pallet::getter(fn vaccine_type)]
-	pub type VaccineType<T: Config> = StorageMap<_, Blake2_128Concat, u32, VaccineTypeInfo, OptionQuery>;
-
 	// vaccine ID => VaccineInfo struct
 	#[pallet::storage]
 	#[pallet::getter(fn vaccines)]
 	pub type Vaccines<T: Config> = StorageMap<_, Blake2_128Concat, u32, VaccineInfo<AccountIdOf<T>, BoundedVec<AccountIdOf<T>, T::MaxListSize>>, OptionQuery>;
 
-	#[pallet::type_value]
-	pub fn InitialVaccineTypeCount<T: Config>() -> u32 { 1u32 }
-
-	// Vaccine type ID (initial value: 1)
-	#[pallet::storage]
-	#[pallet::getter(fn vaccine_type_count)]
-	pub type VaccineTypeCount<T: Config> = StorageValue<_, VaccineTypeIndex, ValueQuery, InitialVaccineTypeCount<T>>;
 
 	#[pallet::type_value]
 	pub fn InitialVaccineCount<T: Config>() -> u32 { 1u32 }
@@ -157,31 +146,6 @@ use frame_support::{pallet_prelude::{*, ValueQuery, OptionQuery}, dispatch::Disp
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 
-		// register vaccine type by only sysman
-		// ex) Pfizer, Moderna ...
-		#[pallet::weight(10_000)]
-		pub fn register_vac_type(origin: OriginFor<T>) -> DispatchResult {
-
-			let sysman = ensure_signed(origin)?;
-
-			// only manufacture
-			ensure!(Self::sys_man(sysman), Error::<T>::NotSysMan);
-
-			// create vaccine type information
-			let vac_type_id = VaccineTypeCount::<T>::get();
-			let vac_type = VaccineTypeInfo {vac_type_id: Some(vac_type_id)};
-			// TODO: Not safe math
-			<VaccineTypeCount<T>>::put(vac_type_id + 1);
-
-			// Update storage.
-			<VaccineType<T>>::insert(&vac_type_id, vac_type);
-
-			// Emit an event.
-			Self::deposit_event(Event::RegisterVaccineType(vac_type_id));
-			// Return a successful DispatchResultWithPostInfo
-			Ok(())
-		}
-
 		// register vaccine information by only manufacture
 		#[pallet::weight(10_000)]
 		pub fn register_vac_info(origin: OriginFor<T>, vac_type_id: Option<u32>) -> DispatchResult {
@@ -189,9 +153,9 @@ use frame_support::{pallet_prelude::{*, ValueQuery, OptionQuery}, dispatch::Disp
 			let manufacture = ensure_signed(origin)?;
 
 			// only manufacture
-			ensure!(Self::vm(&manufacture), Error::<T>::NotManufacture);
+			T::AccountInfo::check_account(&manufacture, Role::VM);
 			// confirm exist vaccine type
-			ensure!(<VaccineType<T>>::contains_key(vac_type_id.unwrap()), Error::<T>::NotRegisteredVaccineType);
+			// ensure!(<VaccineType<T>>::contains_key(vac_type_id.unwrap()), Error::<T>::NotRegisteredVaccineType);
 
 			let vac_id = VaccineCount::<T>::get();
 
@@ -238,7 +202,7 @@ use frame_support::{pallet_prelude::{*, ValueQuery, OptionQuery}, dispatch::Disp
 			let sender = ensure_signed(origin)?;
 
 			// only manufacture or distributer
-			ensure!(Self::vm(&sender) || Self::vad(&sender), Error::<T>::NotManufacture);
+			T::AccountInfo::check_union(&sender, Role::VM, Role::VAD);
 
 			// confirm exist vaccine
 			ensure!(<Vaccines<T>>::contains_key(vac_id.unwrap()), Error::<T>::NotRegisteredVaccine);
@@ -275,7 +239,7 @@ use frame_support::{pallet_prelude::{*, ValueQuery, OptionQuery}, dispatch::Disp
 			ensure!(<Vaccines<T>>::contains_key(vac_id.unwrap()), Error::<T>::NotRegisteredVaccine);
 
 			// only manufacture or distributer
-			ensure!(Self::vm(&receiver) || Self::vad(&receiver), Error::<T>::NotManufacture);
+			T::AccountInfo::check_union(&receiver, Role::VM, Role::VAD);
 
 			// only specified receiver
 			let vac_info = <Vaccines<T>>::get(vac_id.unwrap()).unwrap();
@@ -311,7 +275,7 @@ use frame_support::{pallet_prelude::{*, ValueQuery, OptionQuery}, dispatch::Disp
 			let organization = ensure_signed(origin)?;
 
 			// only approved organization
-			ensure!(Self::vao(&organization), Error::<T>::NotOrganization);
+			T::AccountInfo::check_account(&organization, Role::VAO);
 			// confirm exist vaccine
 			ensure!(<Vaccines<T>>::contains_key(vac_id.unwrap()), Error::<T>::NotRegisteredVaccine);
 			//TODO: confirm dont double approve by one organization
@@ -340,7 +304,7 @@ use frame_support::{pallet_prelude::{*, ValueQuery, OptionQuery}, dispatch::Disp
 			let sender = ensure_signed(origin)?;
 
 			// only manufacture or distributer
-			ensure!(Self::vm(&sender) || Self::vad(&sender), Error::<T>::NotManufacture);
+			T::AccountInfo::check_union(&sender, Role::VM, Role::VAD);
 
 			// confirm exist vaccine
 			ensure!(<Vaccines<T>>::contains_key(vac_id.unwrap()), Error::<T>::NotRegisteredVaccine);

@@ -9,6 +9,7 @@ include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
 };
+use pallet_vaccine::AccountPallet;
 use sp_api::impl_runtime_apis;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
@@ -274,6 +275,7 @@ impl pallet_vaccine::Config for Runtime {
 	type Event = Event;
 	type MaxListSize = ConstU32<30>;
 	type UnixTime = pallet_timestamp::Pallet<Self>;
+	type AccountInfo = AccountPallet<Self::AccountId>;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
