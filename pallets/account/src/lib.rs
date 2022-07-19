@@ -166,7 +166,7 @@ pub mod pallet {
 
 			let claimer = ensure_signed(origin)?;
 
-			Self::check_claim_account(&claimer, &role);
+			Self::check_claim_account(&claimer, role.clone());
 
 			let mut account = <Accounts<T>>::get(&claimer).unwrap();
 			account.status = RoleStatus::Pending;
@@ -232,9 +232,9 @@ pub mod pallet {
 	}
 
   /*----------------------------------------------helper function ------------------------------------------------- */
-	impl<T: Config> Pallet<T> {
+	impl<T: Config> AccountPallet<T::AccountId> for Pallet<T> {
 
-		pub fn check_claim_account(claimer: &T::AccountId, role: &Role) -> DispatchResult {
+		fn check_claim_account(claimer: &T::AccountId, role: Role) -> DispatchResult {
 
 			let account = <Accounts<T>>::get(claimer).unwrap();
 			match account.role {
@@ -251,7 +251,7 @@ pub mod pallet {
 			}
 		}
 
-		pub fn check_account(who: &T::AccountId, role: Role) -> DispatchResult {
+		fn check_account(who: &T::AccountId, role: Role) -> DispatchResult {
 			let account = <Accounts<T>>::get(who).unwrap();
 			match account.role {
 				role => {
@@ -266,7 +266,7 @@ pub mod pallet {
 			}
 		}
 
-		pub fn check_union(who: &T::AccountId, role1: Role, role2: Role) -> DispatchResult {
+		fn check_union(who: &T::AccountId, role1: Role, role2: Role) -> DispatchResult {
 			let account = <Accounts<T>>::get(who).unwrap();
 			match account.role {
 				role1 => {
@@ -289,7 +289,7 @@ pub mod pallet {
 			}
 		}
 
-		pub fn check_approve_account(claimer: &T::AccountId, role: Role) -> DispatchResult {
+		fn check_approve_account(claimer: &T::AccountId, role: Role) -> DispatchResult {
 
 			let account = <Accounts<T>>::get(claimer).unwrap();
 			match account.role {
