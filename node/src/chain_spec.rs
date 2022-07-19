@@ -1,6 +1,6 @@
 use node_template_runtime::{
 	AccountId, AuraConfig, BalancesConfig, GenesisConfig, GrandpaConfig, Signature, SudoConfig,
-	SystemConfig, TemplateModuleConfig, WASM_BINARY,
+	SystemConfig, AccountConfig, WASM_BINARY,
 };
 use sc_service::ChainType;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
@@ -148,7 +148,7 @@ fn testnet_genesis(
 			// Configure endowed accounts with initial balance of 1 << 60.
 			balances: endowed_accounts.iter().cloned().map(|k| (k, 1 << 60)).collect(),
 		},
-		template_module: TemplateModuleConfig {
+		account: AccountConfig {
 			genesis_account: genesis_account.iter().cloned().map(|x| (x.clone())).collect(),
 		},
 		aura: AuraConfig {

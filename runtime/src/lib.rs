@@ -44,7 +44,8 @@ pub use sp_runtime::BuildStorage;
 pub use sp_runtime::{Perbill, Permill};
 
 /// Import the template pallet.
-pub use pallet_template;
+pub use pallet_account;
+pub use pallet_vaccine;
 
 /// An index to a block.
 pub type BlockNumber = u32;
@@ -262,7 +263,14 @@ impl pallet_sudo::Config for Runtime {
 }
 
 /// Configure the pallet-template in pallets/template.
-impl pallet_template::Config for Runtime {
+impl pallet_account::Config for Runtime {
+	type Event = Event;
+	type MaxListSize = ConstU32<30>;
+	type UnixTime = pallet_timestamp::Pallet<Self>;
+}
+
+/// Configure the pallet-template in pallets/template.
+impl pallet_vaccine::Config for Runtime {
 	type Event = Event;
 	type MaxListSize = ConstU32<30>;
 	type UnixTime = pallet_timestamp::Pallet<Self>;
@@ -284,7 +292,8 @@ construct_runtime!(
 		TransactionPayment: pallet_transaction_payment,
 		Sudo: pallet_sudo,
 		// Include the custom logic from the pallet-template in the runtime.
-		TemplateModule: pallet_template,
+		Account: pallet_account,
+		Vaccine: pallet_vaccine,
 	}
 );
 

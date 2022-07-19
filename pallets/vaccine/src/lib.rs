@@ -16,12 +16,13 @@ mod benchmarking;
 
 #[frame_support::pallet]
 pub mod pallet {
-use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult, traits::UnixTime};
+use frame_support::{pallet_prelude::{*, ValueQuery, OptionQuery}, dispatch::DispatchResult, traits::UnixTime};
 	use frame_system::pallet_prelude::*;
 	use sp_std::vec::Vec;
 	use scale_info::TypeInfo;
 	use serde::{Deserialize, Serialize};
 	use sp_runtime::traits::SaturatedConversion;
+	use pallet_account::{Role};
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
@@ -30,12 +31,20 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult, t
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 		type MaxListSize: Get<u32>;
 		type UnixTime: UnixTime;
+		type Account: Account<Self::AccountId>;
+	}
+
+	pub trait AccountPallet<AccountId> {
+		fn check_claim_account(claimer: AccountId, role: Role) -> DispatchResult;
+		fn check_account(who: AccountId, role: Role) -> DispatchResult;
+		fn check_approve_account(claimer: AccountId, role: Role) -> DispatchResult;
 	}
 
 	type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
 
 	pub type VaccineTypeIndex = u32;
 	pub type VaccineIndex = u32;
+
 
 	#[derive(Decode, Encode, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo, Default, MaxEncodedLen)]
 	#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
@@ -73,49 +82,6 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult, t
 	pub struct Pallet<T>(_);
 
 
-	// only claim role account
-	#[pallet::storage]
-	#[pallet::getter(fn pending_gov)]
-	pub type PendingGOV<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, bool, ValueQuery>;
-
-	#[pallet::storage]
-	#[pallet::getter(fn pending_sys_man)]
-	pub type PendingSYSMAN<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, bool, ValueQuery>;
-
-	#[pallet::storage]
-	#[pallet::getter(fn pending_vm)]
-	pub type PendingVM<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, bool, ValueQuery>;
-
-	#[pallet::storage]
-	#[pallet::getter(fn pending_vao)]
-	pub type PendingVAO<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, bool, ValueQuery>;
-
-	#[pallet::storage]
-	#[pallet::getter(fn pending_vad)]
-	pub type PendingVAD<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, bool, ValueQuery>;
-
-
-	// approved account
-	#[pallet::storage]
-	#[pallet::getter(fn gov)]
-	pub type GOV<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, bool, ValueQuery>;
-
-	#[pallet::storage]
-	#[pallet::getter(fn sys_man)]
-	pub type SYSMAN<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, bool, ValueQuery>;
-
-	#[pallet::storage]
-	#[pallet::getter(fn vm)]
-	pub type VM<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, bool, ValueQuery>;
-
-	#[pallet::storage]
-	#[pallet::getter(fn vao)]
-	pub type VAO<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, bool, ValueQuery>;
-
-	#[pallet::storage]
-	#[pallet::getter(fn vad)]
-	pub type VAD<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, bool, ValueQuery>;
-
 	#[pallet::storage]
 	#[pallet::getter(fn vaccine_type)]
 	pub type VaccineType<T: Config> = StorageMap<_, Blake2_128Concat, u32, VaccineTypeInfo, OptionQuery>;
@@ -150,29 +116,6 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult, t
 	#[pallet::storage]
 	#[pallet::getter(fn used_vaccine)]
 	pub type UsedVaccine<T: Config> = StorageDoubleMap<_, Blake2_128Concat, u32, Blake2_128Concat, T::AccountId, bool, ValueQuery>;
-
-	// Alice is sysman by default
-	#[pallet::genesis_config]
-	pub struct GenesisConfig<T: Config> {
-		pub genesis_account: Vec<T::AccountId>,
-	}
-
-	#[cfg(feature = "std")]
-	impl<T: Config> Default for GenesisConfig<T> {
-		fn default() -> Self {
-			Self { genesis_account: Default::default() }
-		}
-	}
-
-	#[pallet::genesis_build]
-	impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
-		fn build(&self) {
-			for account_id in &self.genesis_account {
-				<SYSMAN<T>>::insert(account_id, true);
-			}
-		}
-	}
-
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -213,201 +156,6 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult, t
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-
-/* -----------------------------------------------claim role function ----------------------------------------- */		
-		#[pallet::weight(10_000)]
-		pub fn claim_sys_man(origin: OriginFor<T>) -> DispatchResult {
-
-			let claimer = ensure_signed(origin)?;
-
-			ensure!(!Self::pending_sys_man(&claimer), Error::<T>::AlreadyClaimed);
-			ensure!(!Self::sys_man(&claimer), Error::<T>::AlreadyApproved);
-
-			// Update storage.
-			<PendingSYSMAN<T>>::insert(&claimer, true);
-
-			// Emit an event.
-			Self::deposit_event(Event::Claimed(claimer));
-			// Return a successful DispatchResultWithPostInfo
-			Ok(())
-		}
-
-		#[pallet::weight(10_000)]
-		pub fn claim_vm(origin: OriginFor<T>) -> DispatchResult {
-
-			let claimer = ensure_signed(origin)?;
-
-			ensure!(!Self::pending_vm(&claimer), Error::<T>::AlreadyClaimed);
-			ensure!(!Self::vm(&claimer), Error::<T>::AlreadyApproved);
-
-			// Update storage.
-			<PendingVM<T>>::insert(&claimer, true);
-
-			// Emit an event.
-			Self::deposit_event(Event::Claimed(claimer));
-			// Return a successful DispatchResultWithPostInfo
-			Ok(())
-		}
-
-		#[pallet::weight(10_000)]
-		pub fn claim_gov(origin: OriginFor<T>) -> DispatchResult {
-
-			let claimer = ensure_signed(origin)?;
-
-			ensure!(!Self::pending_gov(&claimer), Error::<T>::AlreadyClaimed);
-			ensure!(!Self::gov(&claimer), Error::<T>::AlreadyApproved);
-
-			// Update storage.
-			<PendingGOV<T>>::insert(&claimer, true);
-
-			// Emit an event.
-			Self::deposit_event(Event::Claimed(claimer));
-			// Return a successful DispatchResultWithPostInfo
-			Ok(())
-		}
-
-		#[pallet::weight(10_000)]
-		pub fn claim_vao(origin: OriginFor<T>) -> DispatchResult {
-
-			let claimer = ensure_signed(origin)?;
-
-			ensure!(!Self::pending_vao(&claimer), Error::<T>::AlreadyClaimed);
-			ensure!(!Self::vao(&claimer), Error::<T>::AlreadyApproved);
-
-			// Update storage.
-			<PendingVAO<T>>::insert(&claimer, true);
-
-			// Emit an event.
-			Self::deposit_event(Event::Claimed(claimer));
-			// Return a successful DispatchResultWithPostInfo
-			Ok(())
-		}
-
-		#[pallet::weight(10_000)]
-		pub fn claim_vad(origin: OriginFor<T>) -> DispatchResult {
-
-			let claimer = ensure_signed(origin)?;
-
-			ensure!(!Self::pending_vad(&claimer), Error::<T>::AlreadyClaimed);
-			ensure!(!Self::vad(&claimer), Error::<T>::AlreadyApproved);
-
-			// Update storage.
-			<PendingVAD<T>>::insert(&claimer, true);
-
-			// Emit an event.
-			Self::deposit_event(Event::Claimed(claimer));
-			// Return a successful DispatchResultWithPostInfo
-			Ok(())
-		}
-	/* ----------------------------------------------------------------------------------------------------- */
-
-
-	/* -------------------------------- approve role function (executed by only sysman) ---------------------*/
-		#[pallet::weight(10_000)]
-		pub fn approve_sys_man(origin: OriginFor<T>, target: T::AccountId) -> DispatchResult {
-
-			let sender = ensure_signed(origin)?;
-			let claimer = target;
-
-			ensure!(Self::sys_man(sender), Error::<T>::NotSysMan);
-
-			ensure!(Self::pending_sys_man(&claimer), Error::<T>::NotClaimed);
-			ensure!(!Self::sys_man(&claimer), Error::<T>::AlreadyApproved);
-
-			// Update storage.
-			<SYSMAN<T>>::insert(&claimer, true);
-			<PendingSYSMAN<T>>::insert(&claimer, false);
-
-			// Emit an event.
-			Self::deposit_event(Event::Approved(claimer));
-			// Return a successful DispatchResultWithPostInfo
-			Ok(())
-		}
-
-		#[pallet::weight(10_000)]
-		pub fn approve_vm(origin: OriginFor<T>, target: T::AccountId) -> DispatchResult {
-
-			let sender = ensure_signed(origin)?;
-			let claimer = target;
-
-			ensure!(Self::sys_man(sender), Error::<T>::NotSysMan);
-
-			ensure!(Self::pending_vm(&claimer), Error::<T>::NotClaimed);
-			ensure!(!Self::vm(&claimer), Error::<T>::AlreadyApproved);
-
-			// Update storage.
-			<VM<T>>::insert(&claimer, true);
-			<PendingVM<T>>::insert(&claimer, false);
-
-			// Emit an event.
-			Self::deposit_event(Event::Approved(claimer));
-			// Return a successful DispatchResultWithPostInfo
-			Ok(())
-		}
-
-		#[pallet::weight(10_000)]
-		pub fn approve_gov(origin: OriginFor<T>, target: T::AccountId) -> DispatchResult {
-
-			let sender = ensure_signed(origin)?;
-			let claimer = target;
-
-			ensure!(Self::sys_man(sender), Error::<T>::NotSysMan);
-
-			ensure!(Self::pending_gov(&claimer), Error::<T>::NotClaimed);
-			ensure!(!Self::gov(&claimer), Error::<T>::AlreadyApproved);
-
-			// Update storage.
-			<GOV<T>>::insert(&claimer, true);
-			<PendingGOV<T>>::insert(&claimer, false);
-
-			// Emit an event.
-			Self::deposit_event(Event::Approved(claimer));
-			// Return a successful DispatchResultWithPostInfo
-			Ok(())
-		}
-
-		#[pallet::weight(10_000)]
-		pub fn approve_vao(origin: OriginFor<T>, target: T::AccountId) -> DispatchResult {
-
-			let sender = ensure_signed(origin)?;
-			let claimer = target;
-
-			ensure!(Self::sys_man(sender), Error::<T>::NotSysMan);
-
-			ensure!(Self::pending_vao(&claimer), Error::<T>::NotClaimed);
-			ensure!(!Self::vao(&claimer), Error::<T>::AlreadyApproved);
-
-			// Update storage.
-			<VAO<T>>::insert(&claimer, true);
-			<PendingVAO<T>>::insert(&claimer, false);
-
-			// Emit an event.
-			Self::deposit_event(Event::Approved(claimer));
-			// Return a successful DispatchResultWithPostInfo
-			Ok(())
-		}
-
-		#[pallet::weight(10_000)]
-		pub fn approve_vad(origin: OriginFor<T>, target: T::AccountId) -> DispatchResult {
-
-			let sender = ensure_signed(origin)?;
-			let claimer = target;
-
-			ensure!(Self::sys_man(sender), Error::<T>::NotSysMan);
-
-			ensure!(Self::pending_vad(&claimer), Error::<T>::NotClaimed);
-			ensure!(!Self::vad(&claimer), Error::<T>::AlreadyApproved);
-
-			// Update storage.
-			<VAD<T>>::insert(&claimer, true);
-			<PendingVAD<T>>::insert(&claimer, false);
-
-			// Emit an event.
-			Self::deposit_event(Event::Approved(claimer));
-			// Return a successful DispatchResultWithPostInfo
-			Ok(())
-		}
-	/* ----------------------------------------------------------------------------------------- */	
 
 		// register vaccine type by only sysman
 		// ex) Pfizer, Moderna ...
@@ -696,5 +444,6 @@ use frame_support::{pallet_prelude::{*, ValueQuery}, dispatch::DispatchResult, t
 
 			Ok(())
 		}
+
 	}
 }
