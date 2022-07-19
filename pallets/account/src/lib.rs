@@ -5,6 +5,13 @@
 /// <https://docs.substrate.io/v3/runtime/frame>
 pub use pallet::*;
 
+use frame_support::{pallet_prelude::{*, ValueQuery, OptionQuery}, dispatch::DispatchResult, traits::UnixTime};
+	use frame_system::pallet_prelude::*;
+	use sp_std::vec::Vec;
+	use scale_info::TypeInfo;
+	use serde::{Deserialize, Serialize};
+	use sp_runtime::traits::SaturatedConversion;
+
 #[cfg(test)]
 mod mock;
 
@@ -14,14 +21,17 @@ mod tests;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 
+pub trait AccountPallet<AccountId>{
+	fn check_claim_account(claimer: &AccountId, role: Role) -> DispatchResult;
+	fn check_account(who: &AccountId, role: Role) -> DispatchResult;
+	fn check_union(who: &AccountId, role1: Role, role2: Role) -> DispatchResult;
+	fn check_approve_account(claimer: &AccountId, role: Role) -> DispatchResult;
+}
+
+
 #[frame_support::pallet]
 pub mod pallet {
-use frame_support::{pallet_prelude::{*, ValueQuery, OptionQuery}, dispatch::DispatchResult, traits::UnixTime};
-	use frame_system::pallet_prelude::*;
-	use sp_std::vec::Vec;
-	use scale_info::TypeInfo;
-	use serde::{Deserialize, Serialize};
-	use sp_runtime::traits::SaturatedConversion;
+	pub use super::*;
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]

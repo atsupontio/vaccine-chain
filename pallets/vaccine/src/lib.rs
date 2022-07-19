@@ -22,7 +22,7 @@ use frame_support::{pallet_prelude::{*, ValueQuery, OptionQuery}, dispatch::Disp
 	use scale_info::TypeInfo;
 	use serde::{Deserialize, Serialize};
 	use sp_runtime::traits::SaturatedConversion;
-	use pallet_account::{Role};
+	use pallet_account::{Role, AccountPallet};
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
@@ -32,13 +32,6 @@ use frame_support::{pallet_prelude::{*, ValueQuery, OptionQuery}, dispatch::Disp
 		type MaxListSize: Get<u32>;
 		type UnixTime: UnixTime;
 		type AccountInfo: AccountPallet<Self::AccountId>;
-	}
-
-	pub trait AccountPallet<AccountId>{
-		fn check_claim_account(claimer: &AccountId, role: Role) -> DispatchResult;
-		fn check_account(who: &AccountId, role: Role) -> DispatchResult;
-		fn check_union(who: &AccountId, role1: Role, role2: Role) -> DispatchResult;
-		fn check_approve_account(claimer: &AccountId, role: Role) -> DispatchResult;
 	}
 
 	type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
