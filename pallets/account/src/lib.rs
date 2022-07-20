@@ -25,7 +25,6 @@ pub trait AccountPallet<AccountId>{
 	fn check_claim_account(claimer: &AccountId, role: Role) -> DispatchResult;
 	fn check_account(who: &AccountId, role: Role) -> DispatchResult;
 	fn check_union(who: &AccountId, role1: Role, role2: Role) -> DispatchResult;
-	fn check_approve_account(claimer: &AccountId, role: Role) -> DispatchResult;
 }
 
 
@@ -41,8 +40,6 @@ pub mod pallet {
 		type MaxListSize: Get<u32>;
 		type UnixTime: UnixTime;
 	}
-
-	type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
 
 	pub type VaccineTypeIndex = u32;
 	pub type VaccineIndex = u32;
@@ -91,10 +88,15 @@ pub mod pallet {
 	#[pallet::generate_store(pub(super) trait Store)]
 	pub struct Pallet<T>(_);
 
-	// vaccine ID => VaccineInfo struct
+	// Account ID => Account struct
 	#[pallet::storage]
 	#[pallet::getter(fn accounts)]
 	pub type Accounts<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, Account<T::AccountId>, OptionQuery>;
+
+	// Account ID => Role
+	#[pallet::storage]
+	#[pallet::getter(fn account_role)]
+	pub type AccountRole<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, Role, OptionQuery>;
 
 	// Alice is sysman by default
 	#[pallet::genesis_config]
@@ -113,8 +115,8 @@ pub mod pallet {
 	impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
 		fn build(&self) {
 			for account_id in &self.genesis_account {
-				let mut account = Account {
-					id: account_id,
+				let mut account = Account::<T::AccountId> {
+					id: account_id.clone(),
 					role: Role::SYSMAN,
 					status: RoleStatus::Approved,
 				};
@@ -131,13 +133,6 @@ pub mod pallet {
 	pub enum Event<T: Config> {
 		Claimed(T::AccountId),
 		Approved(T::AccountId),
-		RegisterVaccineType(u32),
-		RegisterVaccine(u32),
-		RequestVaccine(u32),
-		TransferVaccine(u32),
-		ReceiveVaccine(T::AccountId, T::AccountId, u32),
-		VaccineApproved(u32, T::AccountId),
-		HadVaccination(u32, T::AccountId),
 		AccountRegisted(T::AccountId),
 	}
 
@@ -148,25 +143,24 @@ pub mod pallet {
 		AlreadyApproved,
 		AlreadyRegistered,
 		AlreadyRevoked,
-		AccountRegisted,
 		NotClaimed,
 		NotApproved,
-		NotSysMan,
-		NotManufacture,
-		NotOrganization,
-		WrongRole,
+		InvalidRole,
+		InvalidStatus,
 	}
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-
- /* -----------------------------------------------claim role function ----------------------------------------- */		
+	
 		#[pallet::weight(10_000)]
 		pub fn claim_role(origin: OriginFor<T>, role: Role) -> DispatchResult {
 
 			let claimer = ensure_signed(origin)?;
 
-			Self::check_claim_account(&claimer, role.clone());
+			// cannot claim user role
+			ensure!(role != Role::USER, Error::<T>::InvalidRole);
+
+			Self::check_claim_account(&claimer, role.clone())?;
 
 			let mut account = <Accounts<T>>::get(&claimer).unwrap();
 			account.status = RoleStatus::Pending;
@@ -180,25 +174,23 @@ pub mod pallet {
 			Ok(())
 		}
 
-	/* ----------------------------------------------------------------------------------------------------- */
-
-
-	/* -------------------------------- approve role function (executed by only sysman) ---------------------*/
-
 		#[pallet::weight(10_000)]
-		pub fn approve_role(origin: OriginFor<T>, target: T::AccountId, role: Role) -> DispatchResult {
+		pub fn approve_role(origin: OriginFor<T>, target: T::AccountId) -> DispatchResult {
 
 			let sender = ensure_signed(origin)?;
 
-			Self::check_account(&sender, Role::SYSMAN);
-
-			Self::check_approve_account(&target, role);
+			// only sysman execute
+			Self::check_account(&sender, Role::SYSMAN)?;
 
 			let mut account = <Accounts<T>>::get(&target).unwrap();
+
+			ensure!(account.status != RoleStatus::None, Error::<T>::InvalidStatus);
+
 			account.status = RoleStatus::Approved;
 
 			// Update storage.
-			<Accounts<T>>::insert(&target, account);
+			<Accounts<T>>::insert(&target, &account);
+			<AccountRole<T>>::insert(&target, &account.role);
 
 			// Emit an event.
 			Self::deposit_event(Event::Approved(target));
@@ -206,9 +198,6 @@ pub mod pallet {
 			Ok(())
 		}
 
-	/* ----------------------------------------------------------------------------------------- */	
-
-	
 		#[pallet::weight(10_000)]
 		pub fn register(origin: OriginFor<T>) -> DispatchResult {
 			let who = ensure_signed(origin)?;
@@ -238,7 +227,7 @@ pub mod pallet {
 
 			let account = <Accounts<T>>::get(claimer).unwrap();
 			match account.role {
-				role => Err(Error::<T>::AlreadyClaimed)?,
+				a if a == role => Err(Error::<T>::AlreadyClaimed)?,
 				Role::USER => {
 					match account.status {
 						RoleStatus::Approved => Err(Error::<T>::AlreadyApproved)?,
@@ -247,14 +236,14 @@ pub mod pallet {
 						RoleStatus::None => return Ok(()),
 					}
 				},
-				_ => Err(Error::<T>::WrongRole)?,
+				_ => Err(Error::<T>::InvalidRole)?,
 			}
 		}
 
 		fn check_account(who: &T::AccountId, role: Role) -> DispatchResult {
 			let account = <Accounts<T>>::get(who).unwrap();
 			match account.role {
-				role => {
+				a if a == role => {
 					match account.status {
 						RoleStatus::Approved => return Ok(()),
 						RoleStatus::Revoked => Err(Error::<T>::AlreadyRevoked)?,
@@ -262,14 +251,14 @@ pub mod pallet {
 						RoleStatus::None => Err(Error::<T>::NotClaimed)?,
 					}
 				},
-				_ => Err(Error::<T>::WrongRole)?,
+				_ => Err(Error::<T>::InvalidRole)?,
 			}
 		}
 
 		fn check_union(who: &T::AccountId, role1: Role, role2: Role) -> DispatchResult {
 			let account = <Accounts<T>>::get(who).unwrap();
 			match account.role {
-				role1 => {
+				a if a == role1 => {
 					match account.status {
 						RoleStatus::Approved => return Ok(()),
 						RoleStatus::Revoked => Err(Error::<T>::AlreadyRevoked)?,
@@ -277,7 +266,7 @@ pub mod pallet {
 						RoleStatus::None => Err(Error::<T>::NotClaimed)?,
 					}
 				},
-				role2 => {
+				b if b == role2 => {
 					match account.status {
 						RoleStatus::Approved => return Ok(()),
 						RoleStatus::Revoked => Err(Error::<T>::AlreadyRevoked)?,
@@ -285,23 +274,7 @@ pub mod pallet {
 						RoleStatus::None => Err(Error::<T>::NotClaimed)?,
 					}
 				},
-				_ => Err(Error::<T>::WrongRole)?,
-			}
-		}
-
-		fn check_approve_account(claimer: &T::AccountId, role: Role) -> DispatchResult {
-
-			let account = <Accounts<T>>::get(claimer).unwrap();
-			match account.role {
-				role => {
-					match account.status {
-						RoleStatus::Approved => Err(Error::<T>::AlreadyApproved)?,
-						RoleStatus::Revoked => Err(Error::<T>::AlreadyRevoked)?,
-						RoleStatus::Pending => return Ok(()),
-						RoleStatus::None => Err(Error::<T>::NotClaimed)?,
-					}
-				},
-				_ => Err(Error::<T>::WrongRole)?,
+				_ => Err(Error::<T>::InvalidRole)?,
 			}
 		}
 	}

@@ -1,4 +1,4 @@
-use crate as pallet_template;
+use crate as pallet_account;
 // use crate as pallet_balances;
 use frame_support::traits::{GenesisBuild, ConstU16, ConstU32, ConstU64};
 use frame_system as system;
@@ -20,7 +20,7 @@ frame_support::construct_runtime!(
 	{
 		System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
 		Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
-		TemplateModule: pallet_template::{Pallet, Call, Storage, Event<T>},
+		Account: pallet_account::{Pallet, Call, Storage, Event<T>},
 	}
 );
 
@@ -64,10 +64,20 @@ impl pallet_balances::Config for Test {
 	type WeightInfo = ();
 }
 
-impl pallet_template::Config for Test {
+impl pallet_timestamp::Config for Test {
+	/// A timestamp: milliseconds since the unix epoch.
+	type Moment = u64;
+	type OnTimestampSet = ();
+	type MinimumPeriod = ConstU64<{ 6000 / 2 }>;
+	type WeightInfo = ();
+}
+
+impl pallet_account::Config for Test {
 	type Event = Event;
 	type MaxListSize = ConstU32<3>;
+	type UnixTime = pallet_timestamp::Pallet<Self>;
 }
+
 
 pub struct ExtBuilder;
 
@@ -94,8 +104,8 @@ impl ExtBuilder {
 	}
 
 	pub fn set_genesis_account(self) -> sp_io::TestExternalities {
-		let mut t = pallet_template::GenesisConfig::<Test>::default().build_storage().unwrap();
-	  pallet_template::GenesisConfig::<Test> {
+		let mut t = pallet_account::GenesisConfig::<Test>::default().build_storage().unwrap();
+	  pallet_account::GenesisConfig::<Test> {
 		genesis_account: vec![
 		 1
 		],
