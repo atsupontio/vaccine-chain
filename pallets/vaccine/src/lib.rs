@@ -23,6 +23,7 @@ use frame_support::{pallet_prelude::{*, ValueQuery, OptionQuery}, dispatch::Disp
 	use sp_runtime::traits::SaturatedConversion;
 	use pallet_account::{Role, AccountPallet};
 
+	type VacId = Vec<u8>;
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
@@ -50,7 +51,7 @@ use frame_support::{pallet_prelude::{*, ValueQuery, OptionQuery}, dispatch::Disp
 	#[derive(Decode, Encode, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo, Default, MaxEncodedLen)]
 	#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 	pub struct VaccineInfo<Account, BoundedAccountList> {
-	    pub vac_id: Option<u32>,
+	    pub vac_id: Option<VacId>,
 		pub manufacture_id: Option<Account>,
 		pub owner_id: Option<Account>,
 		pub buyer_id: Option<Account>,
@@ -94,14 +95,6 @@ use frame_support::{pallet_prelude::{*, ValueQuery, OptionQuery}, dispatch::Disp
 	#[pallet::getter(fn vaccines)]
 	pub type Vaccines<T: Config> = StorageMap<_, Blake2_128Concat, u32, VaccineInfo<AccountIdOf<T>, BoundedVec<AccountIdOf<T>, T::MaxListSize>>, OptionQuery>;
 
-
-	#[pallet::type_value]
-	pub fn InitialVaccineCount<T: Config>() -> u32 { 1u32 }
-
-	// Vaccine ID(Initial Value: 1)
-	#[pallet::storage]
-	#[pallet::getter(fn vaccine_count)]
-	pub type VaccineCount<T: Config> = StorageValue<_, VaccineIndex, ValueQuery, InitialVaccineCount<T>>;
 
 	// vaccine ID => MovingInfo struct
 	#[pallet::storage]
@@ -148,7 +141,7 @@ use frame_support::{pallet_prelude::{*, ValueQuery, OptionQuery}, dispatch::Disp
 
 		// register vaccine information by only manufacture
 		#[pallet::weight(10_000)]
-		pub fn register_vac_info(origin: OriginFor<T>, vac_type_id: Option<u32>) -> DispatchResult {
+		pub fn register_vac_info(origin: OriginFor<T>, vac_type_id: Option<u32>, vac_id:VacId) -> DispatchResult {
 
 			let manufacture = ensure_signed(origin)?;
 
@@ -157,7 +150,6 @@ use frame_support::{pallet_prelude::{*, ValueQuery, OptionQuery}, dispatch::Disp
 			// confirm exist vaccine type
 			// ensure!(<VaccineType<T>>::contains_key(vac_type_id.unwrap()), Error::<T>::NotRegisteredVaccineType);
 
-			let vac_id = VaccineCount::<T>::get();
 
 			match Vaccines::<T>::try_get(vac_type_id.unwrap()){
 
@@ -175,10 +167,6 @@ use frame_support::{pallet_prelude::{*, ValueQuery, OptionQuery}, dispatch::Disp
 						inoculation_count: 0,
 					};
 					// Update storage.     
-					//<VaccineCount<T>>::put(vac_id + 1);
-					<VaccineCount<T>>::mutate(|count|{
-						*count +=1;
-					});
 					<Vaccines<T>>::insert(&vac_id, vac_info);
 				}
 			};
