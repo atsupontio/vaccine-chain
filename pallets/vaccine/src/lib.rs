@@ -38,12 +38,14 @@ pub mod pallet {
 	pub type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
 
 
+
 	#[derive(Decode, Encode, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo, Default, MaxEncodedLen)]
 	#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-	pub struct VaccineTypeInfo {
-	    pub vac_type_id: Option<u32>,
-		// TODO: add metadata or hash of metadata
-		// pub metadata: Option<Vec<u8>>,
+	pub enum VacType {
+		COVID19,
+		FLU,
+		HPV,
+		RUBELLA,
 	}
 
 	#[derive(Decode, Encode, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo, Default)]
@@ -56,7 +58,7 @@ pub mod pallet {
 		pub vao_list: BoundedAccountList,
 		// true -> buy, false -> not buy
 		pub buy_confirm: bool,
-		pub vac_type_id: Option<u32>,
+		pub vac_type_id: VacType,
 		pub max_inoculations_number: u32,
 		pub inoculation_count: u32,
 	}
@@ -110,6 +112,10 @@ pub mod pallet {
 	#[pallet::getter(fn used_vaccine)]
 	pub type UsedVaccine<T: Config> = StorageDoubleMap<_, Blake2_128Concat, VacId, Blake2_128Concat, T::AccountId, bool, ValueQuery>;
 
+	#[pallet::storage]
+	#[pallet::getter(fn vaccine_type)]
+	pub type VaccineType<T: Config> = StorageValue<_,Vec<VacType>, ValueQuery>;
+
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
@@ -119,6 +125,7 @@ pub mod pallet {
 		VaccineOwnershipTransfered(VacId),
 		VaccineApproved(VacId, T::AccountId),
 		HadVaccination(VacId, T::AccountId),
+		RegisterVaccineType,
 	}
 
 	// Errors inform users that something went wrong.
@@ -133,14 +140,44 @@ pub mod pallet {
 		VaccineAlreadyUsed,
 		ExceedMaxShotNumber,
 		NotSendFinalTransfer,
+		VaccineTypeIsRegistered,
+		ManuCanNotCreateVaccine,
 	}
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 
+		// register vaccine type by only sysman
+		// ex) Covid19, Flu ...
+		#[pallet::weight(10_000)]
+		pub fn register_vac_type(origin: OriginFor<T>, vac_type:VacType) -> DispatchResult {
+
+			let sysman = ensure_signed(origin)?;
+
+			// only manufacture
+			T::AccountInfo::check_account(&sysman, Role::SYSMAN)?;
+
+			VaccineType::<T>::try_mutate(|vac_type_list| -> DispatchResult{
+
+				if vac_type_list.contains(&vac_type) {
+					return Err(Error::<T>::VaccineTypeIsRegistered)?
+				}
+				else {
+					// Emit an event.
+					vac_type_list.push(vac_type);
+					Self::deposit_event(Event::RegisterVaccineType);
+					Ok(())
+				}
+			})?;
+
+
+			// Return a successful DispatchResultWithPostInfo
+			Ok(())
+		}
+
 		// register vaccine information by only manufacture
 		#[pallet::weight(10_000)]
-		pub fn register_vac_info(origin: OriginFor<T>, vac_id:VacId, vac_type_id: Option<u32>) -> DispatchResult {
+		pub fn register_vac_info(origin: OriginFor<T>, vac_id:VacId, vac_type: VacType) -> DispatchResult {
 
 			let manufacture = ensure_signed(origin)?;
 
@@ -149,7 +186,8 @@ pub mod pallet {
 			// confirm exist vaccine type
 			// ensure!(<VaccineType<T>>::contains_key(vac_type_id.unwrap()), Error::<T>::NotRegisteredVaccineType);
 
-
+			//sysman check if manu can produce this vaccine type
+			ensure!(<VaccineType<T>>::get().contains(&vac_type), Error::<T>::ManuCanNotCreateVaccine);
 			match Vaccines::<T>::try_get(&vac_id){
 
 				Ok(_) => return Err(Error::<T>::VaccineIsRegistered)?,
@@ -161,7 +199,7 @@ pub mod pallet {
 						buyer_id: None,
 						vao_list: Default::default(),
 						buy_confirm: false,
-						vac_type_id,
+						vac_type_id: vac_type,
 						max_inoculations_number: 8,
 						inoculation_count: 0,
 					};
