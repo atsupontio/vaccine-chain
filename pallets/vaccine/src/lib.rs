@@ -4,7 +4,7 @@
 /// Learn more about FRAME and the core library of Substrate FRAME pallets:
 /// <https://docs.substrate.io/v3/runtime/frame>
 pub use pallet::*;
-use frame_support::{pallet_prelude::{*, ValueQuery, OptionQuery}, dispatch::DispatchResult, traits::UnixTime};
+use frame_support::{pallet_prelude::*, dispatch::DispatchResult, traits::UnixTime};
 use frame_system::pallet_prelude::*;
 use scale_info::TypeInfo;
 use serde::{Deserialize, Serialize};
@@ -39,10 +39,9 @@ pub mod pallet {
 
 
 
-	#[derive(Decode, Encode, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo, Default, MaxEncodedLen)]
+	#[derive(Decode, Encode, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 	pub enum VacType {
-		#[default]
 		COVID19,
 		FLU,
 		HPV,
@@ -59,7 +58,7 @@ pub mod pallet {
 		pub vao_list: BoundedAccountList,
 		// true -> buy, false -> not buy
 		pub buy_confirm: bool,
-		pub vac_type_id: VacType,
+		pub vac_type_id: Option<VacType>,
 		pub max_inoculations_number: u32,
 		pub inoculation_count: u32,
 	}
@@ -143,6 +142,7 @@ pub mod pallet {
 		NotSendFinalTransfer,
 		VaccineTypeIsRegistered,
 		ManuCanNotCreateVaccine,
+		FailToPush,
 	}
 
 	#[pallet::call]
@@ -200,7 +200,7 @@ pub mod pallet {
 						buyer_id: None,
 						vao_list: Default::default(),
 						buy_confirm: false,
-						vac_type_id: vac_type,
+						vac_type_id: Some(vac_type),
 						max_inoculations_number: 8,
 						inoculation_count: 0,
 					};
@@ -312,7 +312,10 @@ pub mod pallet {
 
 			// upddate struct(vao list)
 			let mut new_vac_info = <Vaccines<T>>::get(&vac_id).unwrap();
-			new_vac_info.vao_list.try_push(organization.clone());
+			let result = new_vac_info.vao_list.try_push(organization.clone());
+			if let Err(_) = result {
+				return Err(Error::<T>::FailToPush)?
+			}
 			// Update storage.
 			<Vaccines<T>>::insert(&vac_id, new_vac_info);
 
@@ -365,7 +368,7 @@ pub mod pallet {
 
 		// user confirm vaccine
 		#[pallet::weight(10_000)]
-		pub fn confirm_vaccine(origin: OriginFor<T>, vac_owner: Option<T::AccountId>,  vac_id: VacId) -> DispatchResult {
+		pub fn confirm_vaccine(origin: OriginFor<T>, vac_owner: T::AccountId,  vac_id: VacId) -> DispatchResult {
 
 			let user = ensure_signed(origin)?;
 
@@ -373,11 +376,11 @@ pub mod pallet {
 			ensure!(<Vaccines<T>>::contains_key(&vac_id), Error::<T>::NotRegisteredVaccine);
 
 			// confirm vaccine owner
-			let owner = <Vaccines<T>>::get(&vac_id).unwrap().owner_id;
+			let owner = <Vaccines<T>>::get(&vac_id).unwrap().owner_id.unwrap();
 			let confirmation = <Vaccines<T>>::get(&vac_id).unwrap().buy_confirm;
 			// only specified receiver
 			let vac_info = <Vaccines<T>>::get(&vac_id).unwrap();
-			let buyer_id = vac_info.buyer_id.unwrap();
+			let buyer_id = vac_info.clone().buyer_id.unwrap();
 			ensure!(user == buyer_id, Error::<T>::NotVaccineBuyer);
 			// confirm vaccine will not transfer
 			ensure!(!confirmation, Error::<T>::VaccineAlreadyMine);
@@ -388,17 +391,17 @@ pub mod pallet {
 			ensure!(<UsedVaccine<T>>::get(&vac_id, &user), Error::<T>::NotSendFinalTransfer);
 
 			// update struct and storage 
-			let mut new_vac_info = <Vaccines<T>>::get(&vac_id).unwrap();
+			// let mut new_vac_info = <Vaccines<T>>::get(&vac_id).unwrap();
 			// delete to multiple shot
 			// new_vac_info.owner_id = Some(user.clone());
 			// new_vac_info.buy_confirm = true;
-			<Vaccines<T>>::insert(&vac_id, new_vac_info);
+			<Vaccines<T>>::insert(&vac_id, vac_info);
 
 			// issuing vaccine passport
 			Self::register_vac_pass(user.clone(), vac_id.clone())?;
 
 
-			Self::transfer_onwership(Some(vac_owner.unwrap().clone()), Some(user.clone()), vac_id.clone())?;
+			Self::transfer_onwership(Some(vac_owner.clone()), Some(user.clone()), vac_id.clone())?;
 
 			// Emit an event.
 			Self::deposit_event(Event::HadVaccination(vac_id, user));
@@ -438,7 +441,11 @@ pub mod pallet {
 
 			// register vaccine list
 			let mut passport = Self::vaccine_passports(&registrant).unwrap();
-			passport.vac_list.try_push(vac_id);
+			
+			let result = passport.vac_list.try_push(vac_id);
+			if let Err(_) = result {
+				return Err(Error::<T>::FailToPush)?
+			}
 			passport.inoculation_count += 1;
 
 			// Update storage.     

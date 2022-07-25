@@ -5,12 +5,11 @@
 /// <https://docs.substrate.io/v3/runtime/frame>
 pub use pallet::*;
 
-use frame_support::{pallet_prelude::{*, ValueQuery, OptionQuery}, dispatch::DispatchResult, traits::UnixTime};
+use frame_support::{pallet_prelude::*, dispatch::DispatchResult, traits::UnixTime};
 	use frame_system::pallet_prelude::*;
 	use sp_std::vec::Vec;
 	use scale_info::TypeInfo;
 	use serde::{Deserialize, Serialize};
-	use sp_runtime::traits::SaturatedConversion;
 
 #[cfg(test)]
 mod mock;
