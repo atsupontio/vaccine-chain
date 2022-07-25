@@ -42,6 +42,7 @@ pub mod pallet {
 	#[derive(Decode, Encode, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo, Default, MaxEncodedLen)]
 	#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 	pub enum VacType {
+		#[default]
 		COVID19,
 		FLU,
 		HPV,
@@ -327,8 +328,8 @@ pub mod pallet {
 
 			let sender = ensure_signed(origin)?;
 
-			// only manufacture or distributer
-			T::AccountInfo::check_union(&sender, Role::VM, Role::VAD)?;
+			// only distributer
+			T::AccountInfo::check_account(&sender, Role::VAD)?;
 
 			// confirm exist vaccine
 			ensure!(<Vaccines<T>>::contains_key(&vac_id), Error::<T>::NotRegisteredVaccine);
