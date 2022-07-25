@@ -4,7 +4,7 @@
 /// Learn more about FRAME and the core library of Substrate FRAME pallets:
 /// <https://docs.substrate.io/v3/runtime/frame>
 pub use pallet::*;
-use frame_support::{pallet_prelude::{*, ValueQuery, OptionQuery}, dispatch::DispatchResult, traits::UnixTime};
+use frame_support::{pallet_prelude::*, dispatch::DispatchResult, traits::UnixTime};
 use frame_system::pallet_prelude::*;
 use scale_info::TypeInfo;
 use serde::{Deserialize, Serialize};
@@ -39,7 +39,7 @@ pub mod pallet {
 
 
 
-	#[derive(Decode, Encode, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo, Default, MaxEncodedLen)]
+	#[derive(Decode, Encode, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 	pub enum VacType {
 		COVID19,
@@ -58,7 +58,7 @@ pub mod pallet {
 		pub vao_list: BoundedAccountList,
 		// true -> buy, false -> not buy
 		pub buy_confirm: bool,
-		pub vac_type_id: VacType,
+		pub vac_type_id: Option<VacType>,
 		pub max_inoculations_number: u32,
 		pub inoculation_count: u32,
 	}
@@ -199,7 +199,7 @@ pub mod pallet {
 						buyer_id: None,
 						vao_list: Default::default(),
 						buy_confirm: false,
-						vac_type_id: vac_type,
+						vac_type_id: Some(vac_type),
 						max_inoculations_number: 8,
 						inoculation_count: 0,
 					};
@@ -327,8 +327,8 @@ pub mod pallet {
 
 			let sender = ensure_signed(origin)?;
 
-			// only manufacture or distributer
-			T::AccountInfo::check_union(&sender, Role::VM, Role::VAD)?;
+			// only distributer
+			T::AccountInfo::check_account(&sender,Role::VAD)?;
 
 			// confirm exist vaccine
 			ensure!(<Vaccines<T>>::contains_key(&vac_id), Error::<T>::NotRegisteredVaccine);
