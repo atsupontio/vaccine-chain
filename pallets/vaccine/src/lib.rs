@@ -48,6 +48,16 @@ pub mod pallet {
 		RUBELLA,
 	}
 
+	#[derive(Decode, Encode, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+	#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+	pub enum VacStatus {
+		Manufactured,
+		Shipped,
+		Received,
+		Usable,
+		Used,
+	}
+
 	#[derive(Decode, Encode, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo, Default)]
 	#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 	pub struct VaccineInfo<Account, BoundedAccountList> {
@@ -61,6 +71,7 @@ pub mod pallet {
 		pub vac_type_id: Option<VacType>,
 		pub max_inoculations_number: u32,
 		pub inoculation_count: u32,
+		pub status: Option<VacStatus>,
 	}
 
 	#[derive(Decode, Encode, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo, Default, MaxEncodedLen)]
@@ -203,6 +214,7 @@ pub mod pallet {
 						vac_type_id: Some(vac_type),
 						max_inoculations_number: 8,
 						inoculation_count: 0,
+						status: Some(VacStatus::Manufactured),
 					};
 					// Update storage.     
 					<Vaccines<T>>::insert(&vac_id, vac_info);
@@ -241,10 +253,11 @@ pub mod pallet {
 			let count = vac_info.inoculation_count;
 			ensure!(count == 0, Error::<T>::VaccineAlreadyUsed);
 
-			// 送る structとstorageの更新
+			// structとstorageの更新
 			let mut new_vac_info = <Vaccines<T>>::get(&vac_id).unwrap();
 			new_vac_info.buyer_id = Some(buyer_id);
 			new_vac_info.buy_confirm = false;
+			new_vac_info.status = Some(VacStatus::Shipped);
 			<Vaccines<T>>::insert(&vac_id, new_vac_info);
 			
 			// Emit an event.
@@ -282,7 +295,7 @@ pub mod pallet {
 			let mut new_vac_info = <Vaccines<T>>::get(&vac_id).unwrap();
 			new_vac_info.owner_id = Some(receiver.clone());
 			new_vac_info.buy_confirm = true;
-			
+			new_vac_info.status = Some(VacStatus::Received);
 			<Vaccines<T>>::insert(&vac_id, new_vac_info);
 
 			Self::transfer_onwership(Some(sender.clone()), Some(receiver.clone()), vac_id.clone())?;
@@ -348,10 +361,11 @@ pub mod pallet {
 			let owner_id = vac_info.owner_id.unwrap();
 			ensure!(owner_id == sender, Error::<T>::WrongVaccineOwner);
 
-			// 送る structとstorageの更新
+			// structとstorageの更新
 			let mut new_vac_info = <Vaccines<T>>::get(&vac_id).unwrap();
 			new_vac_info.buyer_id = Some(user_id.clone());
 			new_vac_info.buy_confirm = false;
+			new_vac_info.status = Some(VacStatus::Usable);
 			// confirm inoculation count dont reach max number
 			ensure!(new_vac_info.inoculation_count < new_vac_info.max_inoculations_number, Error::<T>::ExceedMaxShotNumber);
 			new_vac_info.inoculation_count += 1;
@@ -391,7 +405,8 @@ pub mod pallet {
 			ensure!(<UsedVaccine<T>>::get(&vac_id, &user), Error::<T>::NotSendFinalTransfer);
 
 			// update struct and storage 
-			// let mut new_vac_info = <Vaccines<T>>::get(&vac_id).unwrap();
+			let mut new_vac_info = <Vaccines<T>>::get(&vac_id).unwrap();
+			new_vac_info.status = Some(VacStatus::Used);
 			// delete to multiple shot
 			// new_vac_info.owner_id = Some(user.clone());
 			// new_vac_info.buy_confirm = true;
