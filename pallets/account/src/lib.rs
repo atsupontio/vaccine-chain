@@ -26,10 +26,10 @@ pub trait AccountPallet<AccountId>{
 	fn check_union(who: &AccountId, role1: Role, role2: Role) -> DispatchResult;
 }
 
-
 #[frame_support::pallet]
 pub mod pallet {
 	pub use super::*;
+	pub use frame_support::inherent::Vec;
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
@@ -42,6 +42,8 @@ pub mod pallet {
 
 	pub type VaccineTypeIndex = u32;
 	pub type VaccineIndex = u32;
+	pub type RecognitionId = u32;
+	pub type String = Vec<u8>;
 
 	#[derive(Encode, Decode, Ord, PartialOrd, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
@@ -79,6 +81,8 @@ pub mod pallet {
 	#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 	pub struct Account<AccountId> {
 		id: AccountId,
+		name: String,
+		recognition_id: RecognitionId,
 		role: Role,
 		status: RoleStatus,
 	}
@@ -116,6 +120,7 @@ pub mod pallet {
 			for account_id in &self.genesis_account {
 				let mut account = Account::<T::AccountId> {
 					id: account_id.clone(),
+					name: 
 					role: Role::SYSMAN,
 					status: RoleStatus::Approved,
 				};
@@ -198,7 +203,7 @@ pub mod pallet {
 		}
 
 		#[pallet::weight(10_000)]
-		pub fn register(origin: OriginFor<T>) -> DispatchResult {
+		pub fn register(origin: OriginFor<T>, name: String, recognition_id: RecognitionId) -> DispatchResult {
 			let who = ensure_signed(origin)?;
 			match <Accounts<T>>::try_get(&who) {
 				Err(_) => {
@@ -206,6 +211,8 @@ pub mod pallet {
 						&who,
 						Account {
 							id: who.clone(),
+							name,
+							recognition_id,
 							role: Default::default(),
 							status: Default::default(),
 						},
