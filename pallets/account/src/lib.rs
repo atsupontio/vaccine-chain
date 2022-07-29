@@ -6,10 +6,9 @@
 pub use pallet::*;
 
 use frame_support::{pallet_prelude::*, dispatch::DispatchResult, traits::UnixTime};
-	use frame_system::pallet_prelude::*;
-	use sp_std::vec::Vec;
-	use scale_info::TypeInfo;
-	use serde::{Deserialize, Serialize};
+use frame_system::pallet_prelude::*;
+use scale_info::TypeInfo;
+use serde::{Deserialize, Serialize};
 
 #[cfg(test)]
 mod mock;
@@ -77,7 +76,7 @@ pub mod pallet {
 		}
 	}
 
-	#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+	#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo)]
 	#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 	pub struct Account<AccountId> {
 		id: AccountId,
@@ -89,6 +88,7 @@ pub mod pallet {
 
 	#[pallet::pallet]
 	#[pallet::generate_store(pub(super) trait Store)]
+	#[pallet::without_storage_info]
 	pub struct Pallet<T>(_);
 
 	// Account ID => Account struct
@@ -120,7 +120,8 @@ pub mod pallet {
 			for account_id in &self.genesis_account {
 				let mut account = Account::<T::AccountId> {
 					id: account_id.clone(),
-					name: 
+					name: b"SYSMAN".to_vec(),
+					recognition_id: 0,
 					role: Role::SYSMAN,
 					status: RoleStatus::Approved,
 				};
