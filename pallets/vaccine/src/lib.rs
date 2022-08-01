@@ -71,7 +71,7 @@ pub mod pallet {
 		pub vac_type_id: Option<VacType>,
 		pub max_inoculations_number: u32,
 		pub inoculation_count: u32,
-		pub status: Option<VacStatus>,
+		//pub status: Option<VacStatus>,
 	}
 
 	#[derive(Decode, Encode, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo, Default, MaxEncodedLen)]
@@ -89,11 +89,12 @@ pub mod pallet {
 		pub from: Option<T::AccountId>,
 		pub to: Option<T::AccountId>,
 		pub time: Option<u64>,
+		pub status: Option<VacStatus>,
 	}
 
 	impl<T: Config> MovingInfo<T> {
-		pub fn new(from: Option<T::AccountId>, to: Option<T::AccountId>) -> Self {
-			MovingInfo { from, to, time: Some(T::UnixTime::now().as_millis().saturated_into::<u64>()) }
+		pub fn new(from: Option<T::AccountId>, to: Option<T::AccountId>, status:Option<VacStatus>) -> Self {
+			MovingInfo { from, to, time: Some(T::UnixTime::now().as_millis().saturated_into::<u64>()),status }
 		}
 	}
 
@@ -111,7 +112,7 @@ pub mod pallet {
 	// vaccine ID => MovingInfo struct
 	#[pallet::storage]
 	#[pallet::getter(fn ownership_tracking)]
-	pub type OwnershipTracking<T: Config> = StorageMap<_, Blake2_128Concat, VacId, MovingInfo<T>, OptionQuery>;
+	pub type OwnershipTracking<T: Config> = StorageMap<_, Blake2_128Concat, VacId, Vec<MovingInfo<T>>, OptionQuery>;
 
 	// Account ID => PassportInfo struct
 	#[pallet::storage]
@@ -214,14 +215,14 @@ pub mod pallet {
 						vac_type_id: Some(vac_type),
 						max_inoculations_number: 8,
 						inoculation_count: 0,
-						status: Some(VacStatus::Manufactured),
+						//status: Some(VacStatus::Manufactured),
 					};
 					// Update storage.     
 					<Vaccines<T>>::insert(&vac_id, vac_info);
 				}
 			};
 
-			Self::transfer_onwership(Some(manufacture), None, vac_id.clone())?;
+			Self::transfer_onwership(Some(manufacture), None, vac_id.clone(), Some(VacStatus::Manufactured))?;
 
 			// Emit an event.
 			Self::deposit_event(Event::RegisterVaccine(vac_id));
@@ -255,11 +256,12 @@ pub mod pallet {
 
 			// structとstorageの更新
 			let mut new_vac_info = <Vaccines<T>>::get(&vac_id).unwrap();
-			new_vac_info.buyer_id = Some(buyer_id);
+			new_vac_info.buyer_id = Some(buyer_id.clone());
 			new_vac_info.buy_confirm = false;
-			new_vac_info.status = Some(VacStatus::Shipped);
+			//new_vac_info.status = Some(VacStatus::Shipped);
 			<Vaccines<T>>::insert(&vac_id, new_vac_info);
 			
+			Self::transfer_onwership(Some(sender), Some(buyer_id), vac_id.clone(), Some(VacStatus::Shipped))?;
 			// Emit an event.
 			Self::deposit_event(Event::TransferVaccine(vac_id));
 			// Return a successful DispatchResultWithPostInfo
@@ -295,10 +297,10 @@ pub mod pallet {
 			let mut new_vac_info = <Vaccines<T>>::get(&vac_id).unwrap();
 			new_vac_info.owner_id = Some(receiver.clone());
 			new_vac_info.buy_confirm = true;
-			new_vac_info.status = Some(VacStatus::Received);
+			//new_vac_info.status = Some(VacStatus::Received);
 			<Vaccines<T>>::insert(&vac_id, new_vac_info);
 
-			Self::transfer_onwership(Some(sender.clone()), Some(receiver.clone()), vac_id.clone())?;
+			Self::transfer_onwership(Some(sender.clone()), Some(receiver.clone()), vac_id.clone(),Some(VacStatus::Received))?;
 
 			// Emit an event.
 			Self::deposit_event(Event::ReceiveVaccine(receiver, sender, vac_id));
@@ -365,15 +367,15 @@ pub mod pallet {
 			let mut new_vac_info = <Vaccines<T>>::get(&vac_id).unwrap();
 			new_vac_info.buyer_id = Some(user_id.clone());
 			new_vac_info.buy_confirm = false;
-			new_vac_info.status = Some(VacStatus::Usable);
+			//new_vac_info.status = Some(VacStatus::Usable);
 			// confirm inoculation count dont reach max number
 			ensure!(new_vac_info.inoculation_count < new_vac_info.max_inoculations_number, Error::<T>::ExceedMaxShotNumber);
 			new_vac_info.inoculation_count += 1;
 			<Vaccines<T>>::insert(&vac_id, new_vac_info);
 
 			// register vaccine is used
-			<UsedVaccine<T>>::insert(&vac_id, user_id, true);
-			
+			<UsedVaccine<T>>::insert(&vac_id, user_id.clone(), true);
+			Self::transfer_onwership(Some(sender), Some(user_id), vac_id.clone(), Some(VacStatus::Usable))?;
 			// Emit an event.
 			Self::deposit_event(Event::TransferVaccine(vac_id));
 			// Return a successful DispatchResultWithPostInfo
@@ -405,8 +407,8 @@ pub mod pallet {
 			ensure!(<UsedVaccine<T>>::get(&vac_id, &user), Error::<T>::NotSendFinalTransfer);
 
 			// update struct and storage 
-			let mut new_vac_info = <Vaccines<T>>::get(&vac_id).unwrap();
-			new_vac_info.status = Some(VacStatus::Used);
+			//let mut new_vac_info = <Vaccines<T>>::get(&vac_id).unwrap();
+			//new_vac_info.status = Some(VacStatus::Used);
 			// delete to multiple shot
 			// new_vac_info.owner_id = Some(user.clone());
 			// new_vac_info.buy_confirm = true;
@@ -416,7 +418,7 @@ pub mod pallet {
 			Self::register_vac_pass(user.clone(), vac_id.clone())?;
 
 
-			Self::transfer_onwership(Some(vac_owner.clone()), Some(user.clone()), vac_id.clone())?;
+			Self::transfer_onwership(Some(vac_owner.clone()), Some(user.clone()), vac_id.clone(),Some(VacStatus::Used))?;
 
 			// Emit an event.
 			Self::deposit_event(Event::HadVaccination(vac_id, user));
@@ -427,10 +429,18 @@ pub mod pallet {
 /*----------------------------------------------helper function ------------------------------------------------- */
 	impl<T: Config> Pallet<T> {
 
-		pub fn transfer_onwership(from: Option<T::AccountId>, to: Option<T::AccountId>, vac_id: VacId) -> DispatchResult {
-			let time = MovingInfo::<T>::new(from.clone(), to.clone());
-			<OwnershipTracking<T>>::insert(&vac_id, &time);
-
+		pub fn transfer_onwership(from: Option<T::AccountId>, to: Option<T::AccountId>, vac_id: VacId, status: Option<VacStatus>) -> DispatchResult {
+			let time = MovingInfo::<T>::new(from.clone(), to.clone(), status);
+			//<OwnershipTracking<T>>::insert(&vac_id, &time);
+			OwnershipTracking::<T>::try_mutate(&vac_id, |trackings| -> DispatchResult{
+				if let Some(tracks) = trackings {
+					tracks.push(time);
+					return Ok(());
+				}
+				else {
+					Err(Error::<T>::NotRegisteredVaccine)?
+				}
+			})?;
 			// Emit an event.
 			Self::deposit_event(Event::VaccineOwnershipTransfered(vac_id));
 
