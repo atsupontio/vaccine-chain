@@ -112,7 +112,7 @@ pub mod pallet {
 	// vaccine ID => MovingInfo struct
 	#[pallet::storage]
 	#[pallet::getter(fn ownership_tracking)]
-	pub type OwnershipTracking<T: Config> = StorageMap<_, Blake2_128Concat, VacId, Vec<MovingInfo<T>>, OptionQuery>;
+	pub type OwnershipTracking<T: Config> = StorageMap<_, Blake2_128Concat, VacId, Vec<MovingInfo<T>>, ValueQuery>;
 
 	// Account ID => PassportInfo struct
 	#[pallet::storage]
@@ -432,15 +432,9 @@ pub mod pallet {
 		pub fn transfer_onwership(from: Option<T::AccountId>, to: Option<T::AccountId>, vac_id: VacId, status: Option<VacStatus>) -> DispatchResult {
 			let time = MovingInfo::<T>::new(from.clone(), to.clone(), status);
 			//<OwnershipTracking<T>>::insert(&vac_id, &time);
-			OwnershipTracking::<T>::try_mutate(&vac_id, |trackings| -> DispatchResult{
-				if let Some(tracks) = trackings {
-					tracks.push(time);
-					return Ok(());
-				}
-				else {
-					Err(Error::<T>::NotRegisteredVaccine)?
-				}
-			})?;
+			OwnershipTracking::<T>::mutate(&vac_id, |trackings|{
+				trackings.push(time);
+			});
 			// Emit an event.
 			Self::deposit_event(Event::VaccineOwnershipTransfered(vac_id));
 

@@ -81,7 +81,7 @@ pub mod pallet {
 	pub struct Account<AccountId> {
 		id: AccountId,
 		name: String,
-		recognition_id: RecognitionId,
+		address: String,
 		role: Role,
 		status: RoleStatus,
 	}
@@ -121,7 +121,7 @@ pub mod pallet {
 				let mut account = Account::<T::AccountId> {
 					id: account_id.clone(),
 					name: b"SYSMAN".to_vec(),
-					recognition_id: 0,
+					address: b"test@test".to_vec(),
 					role: Role::SYSMAN,
 					status: RoleStatus::Approved,
 				};
@@ -204,7 +204,7 @@ pub mod pallet {
 		}
 
 		#[pallet::weight(10_000)]
-		pub fn register(origin: OriginFor<T>, name: String, recognition_id: RecognitionId) -> DispatchResult {
+		pub fn register(origin: OriginFor<T>, name: String, address: String) -> DispatchResult {
 			let who = ensure_signed(origin)?;
 			match <Accounts<T>>::try_get(&who) {
 				Err(_) => {
@@ -213,7 +213,7 @@ pub mod pallet {
 						Account {
 							id: who.clone(),
 							name,
-							recognition_id,
+							address,
 							role: Default::default(),
 							status: Default::default(),
 						},
