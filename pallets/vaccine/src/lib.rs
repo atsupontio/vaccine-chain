@@ -82,19 +82,22 @@ pub mod pallet {
 		pub inoculation_count: u32,
 	}
 
-	#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+	#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo)]
 	#[scale_info(bounds(), skip_type_params(T))]
 	#[codec(mel_bound())]
 	pub struct MovingInfo<T: Config> {
+		pub vac_id : VacId,
 		pub from: Option<T::AccountId>,
+		pub name_from: Option<Vec<u8>>,
 		pub to: Option<T::AccountId>,
+		pub name_to: Option<Vec<u8>>,
 		pub time: Option<u64>,
 		pub status: Option<VacStatus>,
 	}
 
 	impl<T: Config> MovingInfo<T> {
-		pub fn new(from: Option<T::AccountId>, to: Option<T::AccountId>, status:Option<VacStatus>) -> Self {
-			MovingInfo { from, to, time: Some(T::UnixTime::now().as_millis().saturated_into::<u64>()),status }
+		pub fn new(vac_id: VacId, from: Option<T::AccountId>, to: Option<T::AccountId>, status:Option<VacStatus>, name_from:Option<Vec<u8>>, name_to: Option<Vec<u8>>) -> Self {
+			MovingInfo { vac_id, from, to, time: Some(T::UnixTime::now().as_millis().saturated_into::<u64>()),status, name_from, name_to }
 		}
 	}
 
@@ -221,8 +224,8 @@ pub mod pallet {
 					<Vaccines<T>>::insert(&vac_id, vac_info);
 				}
 			};
-
-			Self::transfer_onwership(Some(manufacture), None, vac_id.clone(), Some(VacStatus::Manufactured))?;
+			let name_from = T::AccountInfo::get_name(&manufacture);
+			Self::transfer_onwership(vac_id.clone(),Some(manufacture), None, Some(VacStatus::Manufactured), name_from, None)?;
 
 			// Emit an event.
 			Self::deposit_event(Event::RegisterVaccine(vac_id));
@@ -261,7 +264,9 @@ pub mod pallet {
 			//new_vac_info.status = Some(VacStatus::Shipped);
 			<Vaccines<T>>::insert(&vac_id, new_vac_info);
 			
-			Self::transfer_onwership(Some(sender), Some(buyer_id), vac_id.clone(), Some(VacStatus::Shipped))?;
+			let name_from = T::AccountInfo::get_name(&sender);
+			let name_to = T::AccountInfo::get_name(&buyer_id);
+			Self::transfer_onwership(vac_id.clone(), Some(sender), Some(buyer_id), Some(VacStatus::Shipped), name_from, name_to)?;
 			// Emit an event.
 			Self::deposit_event(Event::TransferVaccine(vac_id));
 			// Return a successful DispatchResultWithPostInfo
@@ -300,7 +305,9 @@ pub mod pallet {
 			//new_vac_info.status = Some(VacStatus::Received);
 			<Vaccines<T>>::insert(&vac_id, new_vac_info);
 
-			Self::transfer_onwership(Some(sender.clone()), Some(receiver.clone()), vac_id.clone(),Some(VacStatus::Received))?;
+			let name_from = T::AccountInfo::get_name(&sender);
+			let name_to = T::AccountInfo::get_name(&receiver);
+			Self::transfer_onwership( vac_id.clone(),Some(sender.clone()), Some(receiver.clone()),Some(VacStatus::Received), name_from, name_to)?;
 
 			// Emit an event.
 			Self::deposit_event(Event::ReceiveVaccine(receiver, sender, vac_id));
@@ -375,7 +382,10 @@ pub mod pallet {
 
 			// register vaccine is used
 			<UsedVaccine<T>>::insert(&vac_id, user_id.clone(), true);
-			Self::transfer_onwership(Some(sender), Some(user_id), vac_id.clone(), Some(VacStatus::Usable))?;
+			let name_from = T::AccountInfo::get_name(&sender);
+			let name_to = T::AccountInfo::get_name(&user_id);
+
+			Self::transfer_onwership( vac_id.clone(),Some(sender), Some(user_id), Some(VacStatus::Usable), name_from, name_to)?;
 			// Emit an event.
 			Self::deposit_event(Event::TransferVaccine(vac_id));
 			// Return a successful DispatchResultWithPostInfo
@@ -417,8 +427,10 @@ pub mod pallet {
 			// issuing vaccine passport
 			Self::register_vac_pass(user.clone(), vac_id.clone())?;
 
+			let name_from = T::AccountInfo::get_name(&vac_owner);
+			let name_to = T::AccountInfo::get_name(&user);
 
-			Self::transfer_onwership(Some(vac_owner.clone()), Some(user.clone()), vac_id.clone(),Some(VacStatus::Used))?;
+			Self::transfer_onwership( vac_id.clone(),Some(vac_owner.clone()), Some(user.clone()),Some(VacStatus::Used), name_from, name_to)?;
 
 			// Emit an event.
 			Self::deposit_event(Event::HadVaccination(vac_id, user));
@@ -429,8 +441,8 @@ pub mod pallet {
 /*----------------------------------------------helper function ------------------------------------------------- */
 	impl<T: Config> Pallet<T> {
 
-		pub fn transfer_onwership(from: Option<T::AccountId>, to: Option<T::AccountId>, vac_id: VacId, status: Option<VacStatus>) -> DispatchResult {
-			let time = MovingInfo::<T>::new(from.clone(), to.clone(), status);
+		pub fn transfer_onwership(vac_id: VacId, from: Option<T::AccountId>, to: Option<T::AccountId>, status: Option<VacStatus>, name_from: Option<Vec<u8>>, name_to: Option<Vec<u8>>) -> DispatchResult {
+			let time = MovingInfo::<T>::new(vac_id.clone(),from.clone(), to.clone(), status, name_from, name_to);
 			//<OwnershipTracking<T>>::insert(&vac_id, &time);
 			OwnershipTracking::<T>::mutate(&vac_id, |trackings|{
 				trackings.push(time);

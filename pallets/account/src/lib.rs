@@ -9,7 +9,7 @@ use frame_support::{pallet_prelude::*, dispatch::DispatchResult, traits::UnixTim
 use frame_system::pallet_prelude::*;
 use scale_info::TypeInfo;
 use serde::{Deserialize, Serialize};
-
+use sp_std::vec::Vec;
 #[cfg(test)]
 mod mock;
 
@@ -23,6 +23,7 @@ pub trait AccountPallet<AccountId>{
 	fn check_claim_account(claimer: &AccountId, role: Role) -> DispatchResult;
 	fn check_account(who: &AccountId, role: Role) -> DispatchResult;
 	fn check_union(who: &AccountId, role1: Role, role2: Role) -> DispatchResult;
+	fn get_name(who: &AccountId) -> Option<Vec<u8>>;
 }
 
 #[frame_support::pallet]
@@ -152,6 +153,7 @@ pub mod pallet {
 		NotApproved,
 		InvalidRole,
 		InvalidStatus,
+		NotFoundRole,
 	}
 
 	#[pallet::call]
@@ -283,6 +285,16 @@ pub mod pallet {
 				},
 				_ => Err(Error::<T>::InvalidRole)?,
 			}
+		}
+		fn get_name(who:&T::AccountId) -> Option<Vec<u8>>{
+			let account = Self::accounts(who);
+			if let Some(acc) = account {
+				return Some(acc.name);
+			}
+			else {
+				return None;
+			}
+			
 		}
 	}
 }
