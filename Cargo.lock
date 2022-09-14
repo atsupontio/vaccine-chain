@@ -3683,6 +3683,7 @@ dependencies = [
  "frame-system",
  "jsonrpsee",
  "node-template-runtime",
+ "pallet-account",
  "pallet-transaction-payment",
  "pallet-transaction-payment-rpc",
  "sc-basic-authorship",

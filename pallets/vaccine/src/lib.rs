@@ -9,7 +9,7 @@ use frame_system::pallet_prelude::*;
 use scale_info::TypeInfo;
 use serde::{Deserialize, Serialize};
 use sp_runtime::traits::SaturatedConversion;
-use pallet_account::{Role, AccountPallet};
+use pallet_account::{Role, AccountPallet, RoleId};
 use sp_std::vec::Vec;
 #[cfg(test)]
 mod mock;
@@ -32,7 +32,7 @@ pub mod pallet {
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 		type MaxListSize: Get<u32>;
 		type UnixTime: UnixTime;
-		type AccountInfo: AccountPallet<Self::AccountId>;
+		type AccountInfo: AccountPallet;
 	}
 
 	pub type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
@@ -166,9 +166,9 @@ pub mod pallet {
 		// register vaccine type by only sysman
 		// ex) Covid19, Flu ...
 		#[pallet::weight(10_000)]
-		pub fn register_vac_type(origin: OriginFor<T>, vac_type:VacType) -> DispatchResult {
+		pub fn register_vac_type(origin: OriginFor<T>, sysman: RoleId, vac_type:VacType) -> DispatchResult {
 
-			let sysman = ensure_signed(origin)?;
+			let _ = ensure_signed(origin)?;
 
 			// only manufacture
 			T::AccountInfo::check_account(&sysman, Role::SYSMAN)?;
@@ -193,9 +193,9 @@ pub mod pallet {
 
 		// register vaccine information by only manufacture
 		#[pallet::weight(10_000)]
-		pub fn register_vac_info(origin: OriginFor<T>, vac_id:VacId, vac_type: VacType) -> DispatchResult {
+		pub fn register_vac_info(origin: OriginFor<T>,manufacture: RoleId, vac_id:VacId, vac_type: VacType) -> DispatchResult {
 
-			let manufacture = ensure_signed(origin)?;
+			let _ = ensure_signed(origin)?;
 
 			// only manufacture
 			T::AccountInfo::check_account(&manufacture, Role::VM)?;
