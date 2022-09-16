@@ -5,15 +5,14 @@
 /// <https://docs.substrate.io/v3/runtime/frame>
 pub use pallet::*;
 
-use frame_support::{pallet_prelude::*, dispatch::DispatchResult, traits::UnixTime};
+use frame_support::{dispatch::DispatchResult, pallet_prelude::*, traits::UnixTime};
 use frame_system::pallet_prelude::*;
 use scale_info::TypeInfo;
-use sp_std::vec::Vec;
 
 #[cfg(feature = "std")]
 use serde::{ser::Error as SerdeError, Deserialize, Deserializer, Serialize, Serializer};
 
-pub type RoleId = [u8;36];
+pub type RoleId = [u8; 36];
 
 #[cfg(test)]
 mod mock;
@@ -24,7 +23,7 @@ mod tests;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 
-pub trait AccountPallet{
+pub trait AccountPallet {
 	fn check_claim_account(claimer: &RoleId, role: Role) -> DispatchResult;
 	fn check_account(who: &RoleId, role: Role) -> DispatchResult;
 	fn check_union(who: &RoleId, role1: Role, role2: Role) -> DispatchResult;
@@ -49,7 +48,9 @@ pub mod pallet {
 	pub type RecognitionId = u32;
 	pub type String = Vec<u8>;
 
-	#[derive(Encode, Decode, Ord, PartialOrd, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+	#[derive(
+		Encode, Decode, Ord, PartialOrd, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen,
+	)]
 	#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 	pub enum Role {
 		SYSMAN,
@@ -60,8 +61,9 @@ pub mod pallet {
 		USER,
 	}
 
-
-	#[derive(Encode, Decode, Ord, PartialOrd, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+	#[derive(
+		Encode, Decode, Ord, PartialOrd, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen,
+	)]
 	#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 	pub enum RoleStatus {
 		Approved,
@@ -95,13 +97,13 @@ pub mod pallet {
 	// Account ID => Role
 	#[pallet::storage]
 	#[pallet::getter(fn account_role)]
-	pub type AccountRole<T: Config> = StorageMap<_, Blake2_128Concat, RoleId, T::AccountId, OptionQuery>;
+	pub type AccountRole<T: Config> =
+		StorageMap<_, Blake2_128Concat, RoleId, T::AccountId, OptionQuery>;
 
 	/// Store admin user account for special purpose
 	#[pallet::storage]
 	#[pallet::getter(fn system_manager)]
 	pub type SystemManager<T: Config> = StorageMap<_, Twox64Concat, RoleId, bool, OptionQuery>;
-
 
 	// Alice is sysman by default
 	#[pallet::genesis_config]
@@ -120,16 +122,12 @@ pub mod pallet {
 	impl<T: Config> GenesisBuild<T> for GenesisConfig {
 		fn build(&self) {
 			for role_id in &self.genesis_account {
-				let  account = Account {
-					role: Role::SYSMAN,
-					status: RoleStatus::Approved,
-				};
+				let account = Account { role: Role::SYSMAN, status: RoleStatus::Approved };
 				<Accounts<T>>::insert(role_id.0, account);
 				SystemManager::<T>::insert(role_id.0, true);
 			}
 		}
 	}
-
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -154,15 +152,16 @@ pub mod pallet {
 		InvalidStatus,
 		NotFoundRole,
 		PermissionDeny,
-
 	}
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-	
 		#[pallet::weight(10_000)]
-		pub fn approve_role(origin: OriginFor<T>,system: RoleId ,target: RoleId) -> DispatchResult {
-
+		pub fn approve_role(
+			origin: OriginFor<T>,
+			system: RoleId,
+			target: RoleId,
+		) -> DispatchResult {
 			let _ = ensure_signed(origin)?;
 			ensure!(Self::only_system(system), Error::<T>::PermissionDeny);
 			// only sysman execute
@@ -184,17 +183,15 @@ pub mod pallet {
 		}
 
 		#[pallet::weight(10_000)]
-		pub fn register_account(origin: OriginFor<T>, role_id: RoleId, role: Role) -> DispatchResult {
+		pub fn register_account(
+			origin: OriginFor<T>,
+			role_id: RoleId,
+			role: Role,
+		) -> DispatchResult {
 			ensure_root(origin)?;
 			match <Accounts<T>>::try_get(&role_id) {
 				Err(_) => {
-					<Accounts<T>>::insert(
-						&role_id,
-						Account {
-							role,
-							status: Default::default(),
-						},
-					);
+					<Accounts<T>>::insert(&role_id, Account { role, status: Default::default() });
 				},
 				Ok(_) => Err(Error::<T>::AlreadyRegistered)?,
 			}
@@ -203,13 +200,13 @@ pub mod pallet {
 			Ok(())
 		}
 
-				/// add admin for special purposes
+		/// add admin for special purposes
 		#[pallet::weight(10_000)]
 		pub fn add_system(origin: OriginFor<T>, system: RoleId, user: RoleId) -> DispatchResult {
 			let _ = ensure_signed(origin)?;
 
 			if !Self::only_system(system) {
-				return Err(Error::<T>::PermissionDeny)?;
+				return Err(Error::<T>::PermissionDeny)?
 			}
 
 			SystemManager::<T>::insert(&user, true);
@@ -219,10 +216,10 @@ pub mod pallet {
 
 		/// remove admin for special purposes
 		#[pallet::weight(10_000)]
-		pub fn remove_system(origin: OriginFor<T>, system: RoleId ,user: RoleId) -> DispatchResult {
+		pub fn remove_system(origin: OriginFor<T>, system: RoleId, user: RoleId) -> DispatchResult {
 			let _ = ensure_signed(origin)?;
 			if !Self::only_system(system) {
-				return Err(Error::<T>::PermissionDeny)?;
+				return Err(Error::<T>::PermissionDeny)?
 			}
 			SystemManager::<T>::remove(&user);
 			Self::deposit_event(Event::RemoveSystem(user));
@@ -231,20 +228,17 @@ pub mod pallet {
 		}
 	}
 
-  /*----------------------------------------------helper function ------------------------------------------------- */
+	/* ----------------------------------------------helper function
+	 * ------------------------------------------------- */
 	impl<T: Config> AccountPallet for Pallet<T> {
-
 		fn check_claim_account(claimer: &RoleId, role: Role) -> DispatchResult {
-
 			let account = <Accounts<T>>::get(claimer).unwrap();
 			match account.role {
 				a if a == role => Err(Error::<T>::AlreadyClaimed)?,
-				Role::USER => {
-					match account.status {
-						RoleStatus::Approved => Err(Error::<T>::AlreadyApproved)?,
-						RoleStatus::Revoked => Err(Error::<T>::AlreadyRevoked)?,
-						RoleStatus::Pending => Err(Error::<T>::AlreadyClaimed)?,
-					}
+				Role::USER => match account.status {
+					RoleStatus::Approved => Err(Error::<T>::AlreadyApproved)?,
+					RoleStatus::Revoked => Err(Error::<T>::AlreadyRevoked)?,
+					RoleStatus::Pending => Err(Error::<T>::AlreadyClaimed)?,
 				},
 				_ => Err(Error::<T>::InvalidRole)?,
 			}
@@ -253,12 +247,10 @@ pub mod pallet {
 		fn check_account(who: &RoleId, role: Role) -> DispatchResult {
 			let account = <Accounts<T>>::get(who).unwrap();
 			match account.role {
-				a if a == role => {
-					match account.status {
-						RoleStatus::Approved => return Ok(()),
-						RoleStatus::Revoked => Err(Error::<T>::AlreadyRevoked)?,
-						RoleStatus::Pending => Err(Error::<T>::NotApproved)?,
-					}
+				a if a == role => match account.status {
+					RoleStatus::Approved => return Ok(()),
+					RoleStatus::Revoked => Err(Error::<T>::AlreadyRevoked)?,
+					RoleStatus::Pending => Err(Error::<T>::NotApproved)?,
 				},
 				_ => Err(Error::<T>::InvalidRole)?,
 			}
@@ -267,19 +259,15 @@ pub mod pallet {
 		fn check_union(who: &RoleId, role1: Role, role2: Role) -> DispatchResult {
 			let account = <Accounts<T>>::get(who).unwrap();
 			match account.role {
-				a if a == role1 => {
-					match account.status {
-						RoleStatus::Approved => return Ok(()),
-						RoleStatus::Revoked => Err(Error::<T>::AlreadyRevoked)?,
-						RoleStatus::Pending => Err(Error::<T>::NotApproved)?,
-					}
+				a if a == role1 => match account.status {
+					RoleStatus::Approved => return Ok(()),
+					RoleStatus::Revoked => Err(Error::<T>::AlreadyRevoked)?,
+					RoleStatus::Pending => Err(Error::<T>::NotApproved)?,
 				},
-				b if b == role2 => {
-					match account.status {
-						RoleStatus::Approved => return Ok(()),
-						RoleStatus::Revoked => Err(Error::<T>::AlreadyRevoked)?,
-						RoleStatus::Pending => Err(Error::<T>::NotApproved)?,
-					}
+				b if b == role2 => match account.status {
+					RoleStatus::Approved => return Ok(()),
+					RoleStatus::Revoked => Err(Error::<T>::AlreadyRevoked)?,
+					RoleStatus::Pending => Err(Error::<T>::NotApproved)?,
 				},
 				_ => Err(Error::<T>::InvalidRole)?,
 			}
@@ -287,14 +275,11 @@ pub mod pallet {
 	}
 }
 
-
-
-impl<T:Config> Pallet<T> {
+impl<T: Config> Pallet<T> {
 	pub fn only_system(user: RoleId) -> bool {
 		SystemManager::<T>::get(user).unwrap_or(false)
 	}
 }
-
 
 pub struct UserId([u8; 36]);
 
@@ -315,7 +300,7 @@ impl<'de> Deserialize<'de> for UserId {
 	{
 		let s = String::deserialize(deserializer)?;
 
-		let bytes: [u8;36] = s.try_into().expect("Slice with incorrect length");
+		let bytes: [u8; 36] = s.try_into().expect("Slice with incorrect length");
 
 		Ok(UserId::from(bytes))
 		// Ok(String::deserialize(deserializer)?
@@ -326,9 +311,8 @@ impl<'de> Deserialize<'de> for UserId {
 }
 
 #[cfg(feature = "std")]
-impl From<[u8;36]> for UserId {
-	fn from(item: [u8;36]) -> Self {
-        UserId(item)
-    }
+impl From<[u8; 36]> for UserId {
+	fn from(item: [u8; 36]) -> Self {
+		UserId(item)
+	}
 }
-

@@ -1,13 +1,13 @@
 use node_template_runtime::{
-	AccountId, AuraConfig, BalancesConfig, GenesisConfig, GrandpaConfig, Signature, SudoConfig,
-	SystemConfig, AccountConfig, WASM_BINARY,
+	AccountConfig, AccountId, AuraConfig, BalancesConfig, GenesisConfig, GrandpaConfig, Signature,
+	SudoConfig, SystemConfig, WASM_BINARY,
 };
+use pallet_account::UserId;
 use sc_service::ChainType;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{sr25519, Pair, Public};
 use sp_finality_grandpa::AuthorityId as GrandpaId;
 use sp_runtime::traits::{IdentifyAccount, Verify};
-use pallet_account::UserId;
 // The URL for the telemetry server.
 // const STAGING_TELEMETRY_URL: &str = "wss://telemetry.polkadot.io/submit/";
 const DEFAULT_PROTOCOL_ID: &str = "vaccine-chain";
@@ -65,7 +65,7 @@ pub fn development_config() -> Result<ChainSpec, String> {
 					get_account_id_from_seed::<sr25519::Public>("Ferdie"),
 				],
 				true,
-				vec![UserId([0;36])],
+				vec![UserId::from([0; 36])],
 			)
 		},
 		// Bootnodes
@@ -114,7 +114,7 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
 					get_account_id_from_seed::<sr25519::Public>("Ferdie//stash"),
 				],
 				true,
-				vec![get_account_id_from_seed::<sr25519::Public>("Alice")],
+				vec![UserId::from([0; 36])],
 			)
 		},
 		// Bootnodes
@@ -138,7 +138,7 @@ fn testnet_genesis(
 	root_key: AccountId,
 	endowed_accounts: Vec<AccountId>,
 	_enable_println: bool,
-	genesis_account: Vec<AccountId>,
+	system_account: Vec<UserId>,
 ) -> GenesisConfig {
 	GenesisConfig {
 		system: SystemConfig {
@@ -149,9 +149,7 @@ fn testnet_genesis(
 			// Configure endowed accounts with initial balance of 1 << 60.
 			balances: endowed_accounts.iter().cloned().map(|k| (k, 1 << 60)).collect(),
 		},
-		account: AccountConfig {
-			genesis_account: genesis_account.iter().cloned().map(|x| (x.clone())).collect(),
-		},
+		account: AccountConfig { genesis_account: system_account },
 		aura: AuraConfig {
 			authorities: initial_authorities.iter().map(|x| (x.0.clone())).collect(),
 		},

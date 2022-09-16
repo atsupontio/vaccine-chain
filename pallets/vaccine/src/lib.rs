@@ -1,14 +1,14 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+use frame_support::{dispatch::DispatchResult, pallet_prelude::*, traits::UnixTime};
+use frame_system::pallet_prelude::*;
 /// Edit this file to define custom logic or remove it if it is not needed.
 /// Learn more about FRAME and the core library of Substrate FRAME pallets:
 /// <https://docs.substrate.io/v3/runtime/frame>
 pub use pallet::*;
-use frame_support::{pallet_prelude::*, dispatch::DispatchResult, traits::UnixTime};
-use frame_system::pallet_prelude::*;
+use pallet_account::{AccountPallet, Role, RoleId};
 use scale_info::TypeInfo;
 use sp_runtime::traits::SaturatedConversion;
-use pallet_account::{Role, AccountPallet, RoleId};
 use sp_std::vec::Vec;
 
 #[cfg(feature = "std")]
@@ -40,8 +40,6 @@ pub mod pallet {
 
 	pub type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
 
-
-
 	#[derive(Decode, Encode, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 	pub enum VacType {
@@ -64,7 +62,7 @@ pub mod pallet {
 	#[derive(Decode, Encode, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo, Default)]
 	#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 	pub struct VaccineInfo<BoundedAccountList> {
-	    pub vac_id: Option<VacId>,
+		pub vac_id: Option<VacId>,
 		#[cfg_attr(feature = "std", serde(with = "as_string"))]
 		pub manufacture_id: Option<RoleId>,
 		#[cfg_attr(feature = "std", serde(with = "as_string"))]
@@ -80,7 +78,9 @@ pub mod pallet {
 		//pub status: Option<VacStatus>,
 	}
 
-	#[derive(Decode, Encode, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo, Default, MaxEncodedLen)]
+	#[derive(
+		Decode, Encode, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo, Default, MaxEncodedLen,
+	)]
 	#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 	pub struct PassportInfo<BoundedIndexList> {
 		#[cfg_attr(feature = "std", serde(with = "as_string"))]
@@ -93,7 +93,7 @@ pub mod pallet {
 	#[scale_info(bounds(), skip_type_params(T))]
 	#[codec(mel_bound())]
 	pub struct MovingInfo<T> {
-		pub vac_id : VacId,
+		pub vac_id: VacId,
 		pub from: Option<RoleId>,
 		pub to: Option<RoleId>,
 		pub time: Option<u64>,
@@ -101,9 +101,21 @@ pub mod pallet {
 		pub phantom: sp_std::marker::PhantomData<T>,
 	}
 
-	impl<T:Config> MovingInfo<T> {
-		pub fn new(vac_id: VacId, from: Option<RoleId>, to: Option<RoleId>, status:Option<VacStatus>) -> Self {
-			MovingInfo { vac_id, from, to, time: Some(T::UnixTime::now().as_millis().saturated_into::<u64>()),status, phantom:Default::default()}
+	impl<T: Config> MovingInfo<T> {
+		pub fn new(
+			vac_id: VacId,
+			from: Option<RoleId>,
+			to: Option<RoleId>,
+			status: Option<VacStatus>,
+		) -> Self {
+			MovingInfo {
+				vac_id,
+				from,
+				to,
+				time: Some(T::UnixTime::now().as_millis().saturated_into::<u64>()),
+				status,
+				phantom: Default::default(),
+			}
 		}
 	}
 
@@ -115,27 +127,40 @@ pub mod pallet {
 	// vaccine ID => VaccineInfo struct
 	#[pallet::storage]
 	#[pallet::getter(fn vaccines)]
-	pub type Vaccines<T: Config> = StorageMap<_, Blake2_128Concat, VacId, VaccineInfo< BoundedVec<RoleId, T::MaxListSize>>, OptionQuery>;
-
+	pub type Vaccines<T: Config> = StorageMap<
+		_,
+		Blake2_128Concat,
+		VacId,
+		VaccineInfo<BoundedVec<RoleId, T::MaxListSize>>,
+		OptionQuery,
+	>;
 
 	// vaccine ID => MovingInfo struct
 	#[pallet::storage]
 	#[pallet::getter(fn ownership_tracking)]
-	pub type OwnershipTracking<T: Config> = StorageMap<_, Blake2_128Concat, VacId, Vec<MovingInfo<T>>, ValueQuery>;
+	pub type OwnershipTracking<T: Config> =
+		StorageMap<_, Blake2_128Concat, VacId, Vec<MovingInfo<T>>, ValueQuery>;
 
 	// Account ID => PassportInfo struct
 	#[pallet::storage]
 	#[pallet::getter(fn vaccine_passports)]
-	pub type VaccinePassports<T: Config> = StorageMap<_, Blake2_128Concat, RoleId, PassportInfo<BoundedVec<VacId, T::MaxListSize>>, OptionQuery>;
+	pub type VaccinePassports<T: Config> = StorageMap<
+		_,
+		Blake2_128Concat,
+		RoleId,
+		PassportInfo<BoundedVec<VacId, T::MaxListSize>>,
+		OptionQuery,
+	>;
 
 	// (Vaccine ID, Account ID) => true/false(true: used)
 	#[pallet::storage]
 	#[pallet::getter(fn used_vaccine)]
-	pub type UsedVaccine<T: Config> = StorageDoubleMap<_, Blake2_128Concat, VacId, Blake2_128Concat, RoleId, bool, ValueQuery>;
+	pub type UsedVaccine<T: Config> =
+		StorageDoubleMap<_, Blake2_128Concat, VacId, Blake2_128Concat, RoleId, bool, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn vaccine_type)]
-	pub type VaccineType<T: Config> = StorageValue<_,Vec<VacType>, ValueQuery>;
+	pub type VaccineType<T: Config> = StorageValue<_, Vec<VacType>, ValueQuery>;
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -168,23 +193,23 @@ pub mod pallet {
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-
 		// register vaccine type by only sysman
 		// ex) Covid19, Flu ...
 		#[pallet::weight(10_000)]
-		pub fn register_vac_type(origin: OriginFor<T>, sysman: RoleId, vac_type:VacType) -> DispatchResult {
-
+		pub fn register_vac_type(
+			origin: OriginFor<T>,
+			sysman: RoleId,
+			vac_type: VacType,
+		) -> DispatchResult {
 			let _ = ensure_signed(origin)?;
 
 			// only manufacture
 			T::AccountInfo::check_account(&sysman, Role::SYSMAN)?;
 
-			VaccineType::<T>::try_mutate(|vac_type_list| -> DispatchResult{
-
+			VaccineType::<T>::try_mutate(|vac_type_list| -> DispatchResult {
 				if vac_type_list.contains(&vac_type) {
 					return Err(Error::<T>::VaccineTypeIsRegistered)?
-				}
-				else {
+				} else {
 					// Emit an event.
 					vac_type_list.push(vac_type);
 					Self::deposit_event(Event::RegisterVaccineType);
@@ -192,29 +217,35 @@ pub mod pallet {
 				}
 			})?;
 
-
 			// Return a successful DispatchResultWithPostInfo
 			Ok(())
 		}
 
 		// register vaccine information by only manufacture
 		#[pallet::weight(10_000)]
-		pub fn register_vac_info(origin: OriginFor<T>,manufacture: RoleId, vac_id:VacId, vac_type: VacType) -> DispatchResult {
-
+		pub fn register_vac_info(
+			origin: OriginFor<T>,
+			manufacture: RoleId,
+			vac_id: VacId,
+			vac_type: VacType,
+		) -> DispatchResult {
 			let _ = ensure_signed(origin)?;
 
 			// only manufacture
 			T::AccountInfo::check_account(&manufacture, Role::VM)?;
 			// confirm exist vaccine type
-			// ensure!(<VaccineType<T>>::contains_key(vac_type_id.unwrap()), Error::<T>::NotRegisteredVaccineType);
+			// ensure!(<VaccineType<T>>::contains_key(vac_type_id.unwrap()),
+			// Error::<T>::NotRegisteredVaccineType);
 
 			//sysman check if manu can produce this vaccine type
-			ensure!(<VaccineType<T>>::get().contains(&vac_type), Error::<T>::ManuCanNotCreateVaccine);
-			match Vaccines::<T>::try_get(&vac_id){
-
+			ensure!(
+				<VaccineType<T>>::get().contains(&vac_type),
+				Error::<T>::ManuCanNotCreateVaccine
+			);
+			match Vaccines::<T>::try_get(&vac_id) {
 				Ok(_) => return Err(Error::<T>::VaccineIsRegistered)?,
 				Err(_) => {
-					let vac_info = VaccineInfo::<BoundedVec<RoleId, T::MaxListSize>>{
+					let vac_info = VaccineInfo::<BoundedVec<RoleId, T::MaxListSize>> {
 						vac_id: Some(vac_id.clone()),
 						manufacture_id: Some(manufacture.clone()),
 						owner_id: Some(manufacture.clone()),
@@ -226,11 +257,16 @@ pub mod pallet {
 						inoculation_count: 0,
 						//status: Some(VacStatus::Manufactured),
 					};
-					// Update storage.     
+					// Update storage.
 					<Vaccines<T>>::insert(&vac_id, vac_info);
-				}
+				},
 			};
-			Self::transfer_onwership(vac_id.clone(),Some(manufacture), None, Some(VacStatus::Manufactured))?;
+			Self::transfer_onwership(
+				vac_id.clone(),
+				Some(manufacture),
+				None,
+				Some(VacStatus::Manufactured),
+			)?;
 
 			// Emit an event.
 			Self::deposit_event(Event::RegisterVaccine(vac_id));
@@ -240,8 +276,12 @@ pub mod pallet {
 
 		// transfer vaccine by only manufacture and distributer
 		#[pallet::weight(10_000)]
-		pub fn transfer_vaccine(origin: OriginFor<T>, sender: RoleId ,buyer_id: RoleId, vac_id: VacId) -> DispatchResult {
-
+		pub fn transfer_vaccine(
+			origin: OriginFor<T>,
+			sender: RoleId,
+			buyer_id: RoleId,
+			vac_id: VacId,
+		) -> DispatchResult {
 			let _ = ensure_signed(origin)?;
 
 			// only manufacture or distributer
@@ -268,8 +308,13 @@ pub mod pallet {
 			new_vac_info.buy_confirm = false;
 			//new_vac_info.status = Some(VacStatus::Shipped);
 			<Vaccines<T>>::insert(&vac_id, new_vac_info);
-			
-			Self::transfer_onwership(vac_id.clone(), Some(sender), Some(buyer_id), Some(VacStatus::Shipped))?;
+
+			Self::transfer_onwership(
+				vac_id.clone(),
+				Some(sender),
+				Some(buyer_id),
+				Some(VacStatus::Shipped),
+			)?;
 			// Emit an event.
 			Self::deposit_event(Event::TransferVaccine(vac_id));
 			// Return a successful DispatchResultWithPostInfo
@@ -278,7 +323,12 @@ pub mod pallet {
 
 		// receive vaccine by only manufacture and distributer
 		#[pallet::weight(10_000)]
-		pub fn receive_vaccine(origin: OriginFor<T>, receiver: RoleId,sender: RoleId, vac_id: VacId) -> DispatchResult {
+		pub fn receive_vaccine(
+			origin: OriginFor<T>,
+			receiver: RoleId,
+			sender: RoleId,
+			vac_id: VacId,
+		) -> DispatchResult {
 			let _ = ensure_signed(origin)?;
 
 			// confirm exist vaccine
@@ -301,14 +351,19 @@ pub mod pallet {
 			let owner = <Vaccines<T>>::get(&vac_id).unwrap().owner_id.unwrap();
 			ensure!(owner == sender, Error::<T>::WrongVaccineOwner);
 
-			// update struct and storage 
+			// update struct and storage
 			let mut new_vac_info = <Vaccines<T>>::get(&vac_id).unwrap();
 			new_vac_info.owner_id = Some(receiver.clone());
 			new_vac_info.buy_confirm = true;
 			//new_vac_info.status = Some(VacStatus::Received);
 			<Vaccines<T>>::insert(&vac_id, new_vac_info);
 
-			Self::transfer_onwership( vac_id.clone(),Some(sender.clone()), Some(receiver.clone()),Some(VacStatus::Received))?;
+			Self::transfer_onwership(
+				vac_id.clone(),
+				Some(sender.clone()),
+				Some(receiver.clone()),
+				Some(VacStatus::Received),
+			)?;
 
 			// Emit an event.
 			Self::deposit_event(Event::ReceiveVaccine(receiver, sender, vac_id));
@@ -318,8 +373,11 @@ pub mod pallet {
 
 		// approve vaccine by only approved organization
 		#[pallet::weight(10_000)]
-		pub fn approve_vaccine(origin: OriginFor<T>, organization: RoleId, vac_id: VacId) -> DispatchResult {
-
+		pub fn approve_vaccine(
+			origin: OriginFor<T>,
+			organization: RoleId,
+			vac_id: VacId,
+		) -> DispatchResult {
 			let _ = ensure_signed(origin)?;
 
 			// only approved organization
@@ -350,8 +408,12 @@ pub mod pallet {
 
 		// finally transfer vaccine to user
 		#[pallet::weight(10_000)]
-		pub fn transfer_get_vaccine_right(origin: OriginFor<T>,sender: RoleId, user_id: RoleId, vac_id: VacId) -> DispatchResult {
-
+		pub fn transfer_get_vaccine_right(
+			origin: OriginFor<T>,
+			sender: RoleId,
+			user_id: RoleId,
+			vac_id: VacId,
+		) -> DispatchResult {
 			let _ = ensure_signed(origin)?;
 
 			// only distributer
@@ -377,14 +439,22 @@ pub mod pallet {
 			new_vac_info.buy_confirm = false;
 			//new_vac_info.status = Some(VacStatus::Usable);
 			// confirm inoculation count dont reach max number
-			ensure!(new_vac_info.inoculation_count < new_vac_info.max_inoculations_number, Error::<T>::ExceedMaxShotNumber);
+			ensure!(
+				new_vac_info.inoculation_count < new_vac_info.max_inoculations_number,
+				Error::<T>::ExceedMaxShotNumber
+			);
 			new_vac_info.inoculation_count += 1;
 			<Vaccines<T>>::insert(&vac_id, new_vac_info);
 
 			// register vaccine is used
 			<UsedVaccine<T>>::insert(&vac_id, user_id.clone(), true);
 
-			Self::transfer_onwership( vac_id.clone(),Some(sender), Some(user_id), Some(VacStatus::Usable))?;
+			Self::transfer_onwership(
+				vac_id.clone(),
+				Some(sender),
+				Some(user_id),
+				Some(VacStatus::Usable),
+			)?;
 			// Emit an event.
 			Self::deposit_event(Event::TransferVaccine(vac_id));
 			// Return a successful DispatchResultWithPostInfo
@@ -393,8 +463,12 @@ pub mod pallet {
 
 		// user confirm vaccine
 		#[pallet::weight(10_000)]
-		pub fn confirm_vaccine(origin: OriginFor<T>, user:RoleId,vac_owner: RoleId,  vac_id: VacId) -> DispatchResult {
-
+		pub fn confirm_vaccine(
+			origin: OriginFor<T>,
+			user: RoleId,
+			vac_owner: RoleId,
+			vac_id: VacId,
+		) -> DispatchResult {
 			let _ = ensure_signed(origin)?;
 
 			// confirm exist vaccine
@@ -415,7 +489,7 @@ pub mod pallet {
 			// confirm send_final_transfer is sended to me?
 			ensure!(<UsedVaccine<T>>::get(&vac_id, &user), Error::<T>::NotSendFinalTransfer);
 
-			// update struct and storage 
+			// update struct and storage
 			//let mut new_vac_info = <Vaccines<T>>::get(&vac_id).unwrap();
 			//new_vac_info.status = Some(VacStatus::Used);
 			// delete to multiple shot
@@ -426,8 +500,12 @@ pub mod pallet {
 			// issuing vaccine passport
 			Self::register_vac_pass(user.clone(), vac_id.clone())?;
 
-
-			Self::transfer_onwership( vac_id.clone(),Some(vac_owner.clone()), Some(user.clone()),Some(VacStatus::Used))?;
+			Self::transfer_onwership(
+				vac_id.clone(),
+				Some(vac_owner.clone()),
+				Some(user.clone()),
+				Some(VacStatus::Used),
+			)?;
 
 			// Emit an event.
 			Self::deposit_event(Event::HadVaccination(vac_id, user));
@@ -435,13 +513,18 @@ pub mod pallet {
 			Ok(())
 		}
 	}
-/*----------------------------------------------helper function ------------------------------------------------- */
+	/* ----------------------------------------------helper function
+	 * ------------------------------------------------- */
 	impl<T: Config> Pallet<T> {
-
-		pub fn transfer_onwership(vac_id: VacId, from: Option<RoleId>, to: Option<RoleId>, status: Option<VacStatus>) -> DispatchResult {
-			let time = MovingInfo::<T>::new(vac_id.clone(),from.clone(), to.clone(), status);
+		pub fn transfer_onwership(
+			vac_id: VacId,
+			from: Option<RoleId>,
+			to: Option<RoleId>,
+			status: Option<VacStatus>,
+		) -> DispatchResult {
+			let time = MovingInfo::<T>::new(vac_id.clone(), from.clone(), to.clone(), status);
 			//<OwnershipTracking<T>>::insert(&vac_id, &time);
-			OwnershipTracking::<T>::mutate(&vac_id, |trackings|{
+			OwnershipTracking::<T>::mutate(&vac_id, |trackings| {
 				trackings.push(time);
 			});
 			// Emit an event.
@@ -450,72 +533,67 @@ pub mod pallet {
 			Ok(())
 		}
 
-
 		pub fn register_vac_pass(registrant: RoleId, vac_id: VacId) -> DispatchResult {
-			match VaccinePassports::<T>::try_get(&registrant){
-				Ok(_) => {
-				},
+			match VaccinePassports::<T>::try_get(&registrant) {
+				Ok(_) => {},
 				Err(_) => {
-					let vac_pass = PassportInfo::<BoundedVec<VacId, T::MaxListSize>>{
+					let vac_pass = PassportInfo::<BoundedVec<VacId, T::MaxListSize>> {
 						user_id: Some(registrant.clone()),
 						vac_list: Default::default(),
 						inoculation_count: 0,
 					};
 
-					// Update storage.     
+					// Update storage.
 					<VaccinePassports<T>>::insert(&registrant, vac_pass);
-				}
+				},
 			};
 
 			// register vaccine list
 			let mut passport = Self::vaccine_passports(&registrant).unwrap();
-			
+
 			let result = passport.vac_list.try_push(vac_id);
 			if let Err(_) = result {
 				return Err(Error::<T>::FailToPush)?
 			}
 			passport.inoculation_count += 1;
 
-			// Update storage.     
+			// Update storage.
 			<VaccinePassports<T>>::insert(&registrant, passport);
-
 
 			Ok(())
 		}
-
 	}
 }
-
 
 #[cfg(feature = "std")]
 mod as_string {
 	use super::*;
 	use serde::{ser::Error, Deserializer, Serializer};
 
-	pub fn serialize<S: Serializer>(bytes: Option<[u8; 36]>, serializer: S) -> Result<S::Ok, S::Error> {
+	pub fn serialize<S: Serializer>(
+		bytes: &Option<[u8; 36]>,
+		serializer: S,
+	) -> Result<S::Ok, S::Error> {
 		if let Some(data) = bytes {
-			std::str::from_utf8(&data)
-			.map_err(|e| S::Error::custom(format!("Debug buffer contains invalid UTF8 :{}", e)))?
-			.serialize(serializer)
+			std::str::from_utf8(data)
+				.map_err(|e| {
+					S::Error::custom(format!("Debug buffer contains invalid UTF8 :{}", e))
+				})?
+				.serialize(serializer)
+		} else {
+			return serializer.serialize_none()
 		}
-		else {
-			return serializer.serialize_none();
-		}
-
 	}
 
-	pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<[u8; 36]>, D::Error> {
-
+	pub fn deserialize<'de, D: Deserializer<'de>>(
+		deserializer: D,
+	) -> Result<Option<[u8; 36]>, D::Error> {
 		let s: Option<String> = Option::<String>::deserialize(deserializer)?;
 
 		if let Some(s) = s {
-			return Ok(Some(s
-			.as_bytes()
-			.try_into().unwrap()));
+			return Ok(Some(s.as_bytes().try_into().unwrap()))
 		}
-
 
 		Ok(None)
 	}
 }
-
