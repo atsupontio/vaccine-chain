@@ -315,7 +315,7 @@ impl<'de> Deserialize<'de> for UserId {
 	{
 		let s = String::deserialize(deserializer)?;
 
-		let bytes: [u8;36] = s.as_bytes().try_into().expect("Slice with incorrect length");
+		let bytes: [u8;36] = s.try_into().expect("Slice with incorrect length");
 
 		Ok(UserId::from(bytes))
 		// Ok(String::deserialize(deserializer)?
