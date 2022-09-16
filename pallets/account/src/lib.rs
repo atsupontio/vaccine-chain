@@ -169,7 +169,7 @@ pub mod pallet {
 
 			let mut account = <Accounts<T>>::get(&target).unwrap();
 
-			ensure!(account.status != RoleStatus::Pending, Error::<T>::InvalidStatus);
+			ensure!(account.status != RoleStatus::Approved, Error::<T>::InvalidStatus);
 
 			account.status = RoleStatus::Approved;
 
