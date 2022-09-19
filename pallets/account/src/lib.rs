@@ -54,7 +54,6 @@ pub mod pallet {
 	#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 	pub enum Role {
 		SYSMAN,
-		GOV,
 		VM,
 		VAO,
 		VAD,
