@@ -1,6 +1,6 @@
 use crate as pallet_template;
 // use crate as pallet_balances;
-use frame_support::traits::{GenesisBuild, ConstU16, ConstU32, ConstU64};
+use frame_support::traits::{ConstU16, ConstU32, ConstU64, GenesisBuild};
 use frame_system as system;
 use sp_core::H256;
 use sp_runtime::{
@@ -51,7 +51,6 @@ impl system::Config for Test {
 	type MaxConsumers = frame_support::traits::ConstU32<16>;
 }
 
-
 impl pallet_balances::Config for Test {
 	type MaxLocks = ConstU32<50>;
 	type MaxReserves = ();
@@ -73,46 +72,41 @@ pub struct ExtBuilder;
 
 impl ExtBuilder {
 	pub fn build(self) -> sp_io::TestExternalities {
-	 let mut t = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
-	 pallet_balances::GenesisConfig::<Test> {
-	  balances: vec![
-	   (1, 1000000000000000),
-	   (2, 2000000000000000),
-	   (3, 3000000000000000),
-	   (4, 4000000000000000),
-	   (5, 5000000000000000),
-	   (6, 6000000000000000)
-	  ],
-	 }
-	  .assimilate_storage(&mut t)
-	  .unwrap();
+		let mut t = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
+		pallet_balances::GenesisConfig::<Test> {
+			balances: vec![
+				(1, 1000000000000000),
+				(2, 2000000000000000),
+				(3, 3000000000000000),
+				(4, 4000000000000000),
+				(5, 5000000000000000),
+				(6, 6000000000000000),
+			],
+		}
+		.assimilate_storage(&mut t)
+		.unwrap();
 
-   
-	 let mut ext = sp_io::TestExternalities::new(t);
-	 ext.execute_with(|| System::set_block_number(1));
-	 ext
+		let mut ext = sp_io::TestExternalities::new(t);
+		ext.execute_with(|| System::set_block_number(1));
+		ext
 	}
 
 	pub fn set_genesis_account(self) -> sp_io::TestExternalities {
 		let mut t = pallet_template::GenesisConfig::<Test>::default().build_storage().unwrap();
-	  pallet_template::GenesisConfig::<Test> {
-		genesis_account: vec![
-		 1
-		],
-	   }
-		.assimilate_storage(&mut t)
-		.unwrap();
-	   
+		pallet_template::GenesisConfig::<Test> { genesis_account: vec![1] }
+			.assimilate_storage(&mut t)
+			.unwrap();
+
 		let mut ext = sp_io::TestExternalities::new(t);
-	 	ext.execute_with(|| System::set_block_number(1));
-	 	ext
+		ext.execute_with(|| System::set_block_number(1));
+		ext
 	}
 }
 
 impl Default for ExtBuilder {
-    fn default() -> Self {
+	fn default() -> Self {
 		Self
-    }
+	}
 }
 
 // Build genesis storage according to the mock runtime.

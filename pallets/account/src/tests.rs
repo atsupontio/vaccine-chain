@@ -1,8 +1,7 @@
+use crate as pallet_account;
 use crate::{mock::*, Error};
 use frame_support::{assert_noop, assert_ok, traits::GenesisBuild};
-use crate as pallet_account;
 use pallet_account::Role;
-
 
 pub const ALICE: u64 = 1;
 pub const BOB: u64 = 2;
@@ -10,8 +9,7 @@ pub const CHARLIE: u64 = 3;
 pub const DAVE: u64 = 4;
 pub const EVE: u64 = 5;
 pub const FRANK: u64 = 6;
-pub const GEORGE: u64 = 7; 
-
+pub const GEORGE: u64 = 7;
 
 // ALICE(1): system manager
 // BOB(2): manufacture
@@ -19,11 +17,9 @@ pub const GEORGE: u64 = 7;
 // DAVE(4): VAD
 // EVE(5): USER
 
-	#[test]
+#[test]
 fn start_system() {
-	ExtBuilder::default()
-		.set_genesis_account()
-        .execute_with(|| {
+	ExtBuilder::default().set_genesis_account().execute_with(|| {
 		// register account
 		assert_ok!(Account::register(Origin::signed(BOB)));
 		assert_ok!(Account::register(Origin::signed(CHARLIE)));
@@ -58,17 +54,13 @@ fn start_system() {
 	});
 }
 
-
 // ALICE(1): system manager
 // BOB(2): manufacture
 // CHARLIE(3): user
 
 #[test]
 fn should_cause_error_for_register_role() {
-
-	ExtBuilder::default()
-		.set_genesis_account()
-        .execute_with(|| {
+	ExtBuilder::default().set_genesis_account().execute_with(|| {
 		// 1 is system manager by default
 		assert_eq!(Account::sys_man(ALICE), true);
 		// 2 claimed to be manufacture
@@ -89,10 +81,12 @@ fn should_cause_error_for_register_role() {
 		// approve again after approved
 		assert_noop!(Account::approve_vm(Origin::signed(ALICE), BOB), Error::<Test>::NotClaimed);
 		// approve entity which does not claim
-		assert_noop!(Account::approve_vm(Origin::signed(ALICE), CHARLIE), Error::<Test>::NotClaimed);
+		assert_noop!(
+			Account::approve_vm(Origin::signed(ALICE), CHARLIE),
+			Error::<Test>::NotClaimed
+		);
 	});
 }
-
 
 // ALICE(1): system manager
 // BOB(2): manufacture
@@ -100,10 +94,7 @@ fn should_cause_error_for_register_role() {
 // DAVE(4): user
 #[test]
 fn should_cause_error_for_register_info_about_vaccine() {
-	ExtBuilder::default()
-		.set_genesis_account()
-        .execute_with(|| {
-
+	ExtBuilder::default().set_genesis_account().execute_with(|| {
 		// 1 is system manager by default
 		assert_eq!(Account::sys_man(ALICE), true);
 		// 2 claimed to be manufacture
@@ -122,32 +113,45 @@ fn should_cause_error_for_register_info_about_vaccine() {
 		assert_ok!(Account::register_vac_type(Origin::signed(ALICE)));
 
 		// NOT manufacture register vaccine type
-		assert_noop!(Account::register_vac_info(Origin::signed(DAVE), Some(1)), Error::<Test>::NotManufacture);
+		assert_noop!(
+			Account::register_vac_info(Origin::signed(DAVE), Some(1)),
+			Error::<Test>::NotManufacture
+		);
 
 		// sysman register not exist vaccine type
-		assert_noop!(Account::register_vac_info(Origin::signed(BOB), Some(2)), Error::<Test>::NotRegisteredVaccineType);
+		assert_noop!(
+			Account::register_vac_info(Origin::signed(BOB), Some(2)),
+			Error::<Test>::NotRegisteredVaccineType
+		);
 
 		//register vaciine info
 		assert_ok!(Account::register_vac_info(Origin::signed(BOB), Some(1)));
 
 		// vaccine has been already registered
-		assert_noop!(Account::register_vac_info(Origin::signed(BOB), Some(1)), Error::<Test>::VaccineIsRegistered);
+		assert_noop!(
+			Account::register_vac_info(Origin::signed(BOB), Some(1)),
+			Error::<Test>::VaccineIsRegistered
+		);
 
 		// approve vaccine
 		assert_ok!(Account::approve_vaccine(Origin::signed(CHARLIE), Some(1)));
 
 		// not VAO register vaciine info
-		assert_noop!(Account::approve_vaccine(Origin::signed(DAVE), Some(1)), Error::<Test>::NotOrganization);
+		assert_noop!(
+			Account::approve_vaccine(Origin::signed(DAVE), Some(1)),
+			Error::<Test>::NotOrganization
+		);
 
 		// VAO register not exist vaciine id
-		assert_noop!(Account::approve_vaccine(Origin::signed(CHARLIE), Some(2)), Error::<Test>::NotRegisteredVaccine);
+		assert_noop!(
+			Account::approve_vaccine(Origin::signed(CHARLIE), Some(2)),
+			Error::<Test>::NotRegisteredVaccine
+		);
 
 		// TODO: duplicate vaccine approvement
 		// TODO: exceed max list size (3 in mock runtime)
-
 	});
 }
-
 
 // ALICE(1): system manager
 // BOB(2): manufacture
@@ -155,12 +159,10 @@ fn should_cause_error_for_register_info_about_vaccine() {
 // DAVE(4): VAD
 // EVE(5): VAD
 // FRANK(6): user
-// GEORGE(7): 
+// GEORGE(7):
 #[test]
 fn should_cause_error_for_transfer_vaccine() {
-	ExtBuilder::default()
-		.set_genesis_account()
-        .execute_with(|| {
+	ExtBuilder::default().set_genesis_account().execute_with(|| {
 		// 1 is system manager by default
 		assert_eq!(Account::sys_man(ALICE), true);
 		// 2 claimed to be manufacture
@@ -180,43 +182,67 @@ fn should_cause_error_for_transfer_vaccine() {
 		//register vaciine info
 		assert_ok!(Account::register_vac_info(Origin::signed(BOB), Some(1)));
 
-
 		// Not manufacture or distributer transfer vaccine
-		assert_noop!(Account::transfer_vaccine(Origin::signed(FRANK), DAVE, Some(1)), Error::<Test>::NotManufacture);
+		assert_noop!(
+			Account::transfer_vaccine(Origin::signed(FRANK), DAVE, Some(1)),
+			Error::<Test>::NotManufacture
+		);
 
 		// transfer to myself
-		assert_noop!(Account::transfer_vaccine(Origin::signed(BOB), BOB, Some(1)), Error::<Test>::TransferByMyself);
+		assert_noop!(
+			Account::transfer_vaccine(Origin::signed(BOB), BOB, Some(1)),
+			Error::<Test>::TransferByMyself
+		);
 
 		// Not owner transfer vaccine
-		assert_noop!(Account::transfer_vaccine(Origin::signed(DAVE), FRANK, Some(1)), Error::<Test>::WrongVaccineOwner);
+		assert_noop!(
+			Account::transfer_vaccine(Origin::signed(DAVE), FRANK, Some(1)),
+			Error::<Test>::WrongVaccineOwner
+		);
 
 		// transfer not exist vaccine
-		assert_noop!(Account::transfer_vaccine(Origin::signed(BOB), DAVE, Some(3)), Error::<Test>::NotRegisteredVaccine);
+		assert_noop!(
+			Account::transfer_vaccine(Origin::signed(BOB), DAVE, Some(3)),
+			Error::<Test>::NotRegisteredVaccine
+		);
 
 		// transfer vaccine
 		assert_ok!(Account::transfer_vaccine(Origin::signed(BOB), DAVE, Some(1)));
 
-
 		// receive not exist vaccine
-		assert_noop!(Account::receive_vaccine(Origin::signed(DAVE), BOB, Some(3)), Error::<Test>::NotRegisteredVaccine);
+		assert_noop!(
+			Account::receive_vaccine(Origin::signed(DAVE), BOB, Some(3)),
+			Error::<Test>::NotRegisteredVaccine
+		);
 
 		// not manufacture or distributer receive vaccine
-		assert_noop!(Account::receive_vaccine(Origin::signed(FRANK), BOB, Some(1)), Error::<Test>::NotManufacture);
+		assert_noop!(
+			Account::receive_vaccine(Origin::signed(FRANK), BOB, Some(1)),
+			Error::<Test>::NotManufacture
+		);
 
 		// not specified receiver
-		assert_noop!(Account::receive_vaccine(Origin::signed(EVE), FRANK, Some(1)), Error::<Test>::NotVaccineBuyer);
+		assert_noop!(
+			Account::receive_vaccine(Origin::signed(EVE), FRANK, Some(1)),
+			Error::<Test>::NotVaccineBuyer
+		);
 
 		// receive from not vaccine owner
-		assert_noop!(Account::receive_vaccine(Origin::signed(DAVE), EVE, Some(1)), Error::<Test>::WrongVaccineOwner);
+		assert_noop!(
+			Account::receive_vaccine(Origin::signed(DAVE), EVE, Some(1)),
+			Error::<Test>::WrongVaccineOwner
+		);
 
 		// receive vaccine
 		assert_ok!(Account::receive_vaccine(Origin::signed(DAVE), BOB, Some(1)));
 
 		// receive twice
-		assert_noop!(Account::receive_vaccine(Origin::signed(DAVE), BOB, Some(1)), Error::<Test>::VaccineAlreadyMine);
+		assert_noop!(
+			Account::receive_vaccine(Origin::signed(DAVE), BOB, Some(1)),
+			Error::<Test>::VaccineAlreadyMine
+		);
 	});
 }
-
 
 // ALICE(1): system manager
 // BOB(2): manufacture
@@ -227,10 +253,7 @@ fn should_cause_error_for_transfer_vaccine() {
 // GEORGE(7): user
 #[test]
 fn should_cause_error_for_get_confirm_vaccine() {
-	ExtBuilder::default()
-		.set_genesis_account()
-        .execute_with(|| {
-
+	ExtBuilder::default().set_genesis_account().execute_with(|| {
 		// 1 is system manager by default
 		assert_eq!(Account::sys_man(ALICE), true);
 		// 2 claimed to be manufacture
@@ -265,30 +288,56 @@ fn should_cause_error_for_get_confirm_vaccine() {
 		assert_ok!(Account::transfer_vaccine(Origin::signed(DAVE), FRANK, Some(2)));
 
 		// only manufacture or distributer
-		assert_noop!(Account::transfer_get_vaccine_right(Origin::signed(FRANK), DAVE, Some(1)), Error::<Test>::NotManufacture);
+		assert_noop!(
+			Account::transfer_get_vaccine_right(Origin::signed(FRANK), DAVE, Some(1)),
+			Error::<Test>::NotManufacture
+		);
 		// only manufacture or distributer
-		assert_noop!(Account::transfer_get_vaccine_right(Origin::signed(DAVE), FRANK, Some(3)), Error::<Test>::NotRegisteredVaccine);
+		assert_noop!(
+			Account::transfer_get_vaccine_right(Origin::signed(DAVE), FRANK, Some(3)),
+			Error::<Test>::NotRegisteredVaccine
+		);
 		// transfer to myself
-		assert_noop!(Account::transfer_get_vaccine_right(Origin::signed(DAVE), DAVE, Some(1)), Error::<Test>::TransferByMyself);
+		assert_noop!(
+			Account::transfer_get_vaccine_right(Origin::signed(DAVE), DAVE, Some(1)),
+			Error::<Test>::TransferByMyself
+		);
 		// not vaccine owner
-		assert_noop!(Account::transfer_get_vaccine_right(Origin::signed(EVE), FRANK, Some(1)), Error::<Test>::WrongVaccineOwner);
+		assert_noop!(
+			Account::transfer_get_vaccine_right(Origin::signed(EVE), FRANK, Some(1)),
+			Error::<Test>::WrongVaccineOwner
+		);
 		// receive vaccine inoculation right
 		assert_ok!(Account::transfer_get_vaccine_right(Origin::signed(DAVE), FRANK, Some(1)));
 
 		// not send final transfer to me
-		assert_noop!(Account::confirm_vaccine(Origin::signed(FRANK), Some(DAVE), Some(3)), Error::<Test>::NotRegisteredVaccine);
+		assert_noop!(
+			Account::confirm_vaccine(Origin::signed(FRANK), Some(DAVE), Some(3)),
+			Error::<Test>::NotRegisteredVaccine
+		);
 		// not vaccine user
-		assert_noop!(Account::confirm_vaccine(Origin::signed(GEORGE), Some(DAVE), Some(1)), Error::<Test>::NotVaccineBuyer);
+		assert_noop!(
+			Account::confirm_vaccine(Origin::signed(GEORGE), Some(DAVE), Some(1)),
+			Error::<Test>::NotVaccineBuyer
+		);
 		// not vaccine previous owner
-		assert_noop!(Account::confirm_vaccine(Origin::signed(FRANK), Some(EVE), Some(1)), Error::<Test>::WrongVaccineOwner);
+		assert_noop!(
+			Account::confirm_vaccine(Origin::signed(FRANK), Some(EVE), Some(1)),
+			Error::<Test>::WrongVaccineOwner
+		);
 		// not transfer vaccine but transfer_get_vaccine_right
-		assert_noop!(Account::confirm_vaccine(Origin::signed(FRANK), Some(DAVE), Some(2)), Error::<Test>::NotSendFinalTransfer);
+		assert_noop!(
+			Account::confirm_vaccine(Origin::signed(FRANK), Some(DAVE), Some(2)),
+			Error::<Test>::NotSendFinalTransfer
+		);
 
 		// confirm use vaccine
 		assert_ok!(Account::confirm_vaccine(Origin::signed(FRANK), Some(DAVE), Some(1)));
 
 		// not send final transfer to me
-		assert_noop!(Account::confirm_vaccine(Origin::signed(FRANK), Some(DAVE), Some(1)), Error::<Test>::VaccineAlreadyMine);
-
-		});
-	}
+		assert_noop!(
+			Account::confirm_vaccine(Origin::signed(FRANK), Some(DAVE), Some(1)),
+			Error::<Test>::VaccineAlreadyMine
+		);
+	});
+}
