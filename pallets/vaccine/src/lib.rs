@@ -40,7 +40,7 @@ pub mod pallet {
 
 	pub type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
 
-	#[derive(Decode, Encode, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+	#[derive(Decode, Encode, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo)]
 	#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 	pub enum VacType {
 		COVID19,
@@ -49,7 +49,7 @@ pub mod pallet {
 		RUBELLA,
 	}
 
-	#[derive(Decode, Encode, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+	#[derive(Decode, Encode, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo)]
 	#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 	pub enum VacStatus {
 		Manufactured,
@@ -63,11 +63,8 @@ pub mod pallet {
 	#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 	pub struct VaccineInfo<BoundedAccountList> {
 		pub vac_id: Option<VacId>,
-		#[cfg_attr(feature = "std", serde(with = "as_string"))]
 		pub manufacture_id: Option<RoleId>,
-		#[cfg_attr(feature = "std", serde(with = "as_string"))]
 		pub owner_id: Option<RoleId>,
-		#[cfg_attr(feature = "std", serde(with = "as_string"))]
 		pub buyer_id: Option<RoleId>,
 		pub vao_list: BoundedAccountList,
 		// true -> buy, false -> not buy
@@ -79,12 +76,11 @@ pub mod pallet {
 	}
 
 	#[derive(
-		Decode, Encode, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo, Default, MaxEncodedLen,
+		Decode, Encode, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo, Default
 	)]
 	#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 	pub struct PassportInfo<BoundedIndexList> {
-		#[cfg_attr(feature = "std", serde(with = "as_string"))]
-		pub user_id: Option<RoleId>,
+		pub user_id: RoleId,
 		pub vac_list: BoundedIndexList,
 		pub inoculation_count: u32,
 	}
@@ -538,7 +534,7 @@ pub mod pallet {
 				Ok(_) => {},
 				Err(_) => {
 					let vac_pass = PassportInfo::<BoundedVec<VacId, T::MaxListSize>> {
-						user_id: Some(registrant.clone()),
+						user_id: registrant.clone(),
 						vac_list: Default::default(),
 						inoculation_count: 0,
 					};

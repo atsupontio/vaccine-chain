@@ -31,7 +31,7 @@ const main = async() => {
 
 
   const unsub = await api.tx.vaccine
-  .registerVacInfo('603feed0-b9dc-40fe-b263-38fde6d7b81e','1',Vac.COVID19)
+  .registerVacInfo('84151fda-d9e3-4f6d-9ed5-4f1eb4709e8f','1',Vac.COVID19)
   .signAndSend(TEST_ACCOUNT, (result) => {
     console.log(`Current status is ${result.status}`);
 

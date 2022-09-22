@@ -65,7 +65,7 @@ pub fn development_config() -> Result<ChainSpec, String> {
 					get_account_id_from_seed::<sr25519::Public>("Ferdie"),
 				],
 				true,
-				vec![UserId::from([0; 36])],
+				vec!["0".as_bytes().to_vec()],
 			)
 		},
 		// Bootnodes
@@ -114,7 +114,7 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
 					get_account_id_from_seed::<sr25519::Public>("Ferdie//stash"),
 				],
 				true,
-				vec![UserId::from([0; 36])],
+				vec!["0".as_bytes().to_vec()],
 			)
 		},
 		// Bootnodes
@@ -138,7 +138,7 @@ fn testnet_genesis(
 	root_key: AccountId,
 	endowed_accounts: Vec<AccountId>,
 	_enable_println: bool,
-	system_account: Vec<UserId>,
+	system_account: Vec<Vec<u8>>,
 ) -> GenesisConfig {
 	GenesisConfig {
 		system: SystemConfig {

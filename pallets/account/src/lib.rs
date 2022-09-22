@@ -9,11 +9,12 @@ use frame_support::{dispatch::DispatchResult, pallet_prelude::*, traits::UnixTim
 use frame_system::pallet_prelude::*;
 use scale_info::TypeInfo;
 
+use sp_std::vec::Vec;
 #[cfg(feature = "std")]
 use serde::{ser::Error as SerdeError, Deserialize, Deserializer, Serialize, Serializer};
 
-pub type RoleId = [u8; 36];
-
+// pub type RoleId = [u8; 36];
+pub type RoleId = Vec<u8>;
 #[cfg(test)]
 mod mock;
 
@@ -49,7 +50,7 @@ pub mod pallet {
 	pub type String = Vec<u8>;
 
 	#[derive(
-		Encode, Decode, Ord, PartialOrd, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen,
+		Encode, Decode, Ord, PartialOrd, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo,
 	)]
 	#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 	pub enum Role {
@@ -61,7 +62,7 @@ pub mod pallet {
 	}
 
 	#[derive(
-		Encode, Decode, Ord, PartialOrd, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen,
+		Encode, Decode, Ord, PartialOrd, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo,
 	)]
 	#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 	pub enum RoleStatus {
@@ -107,7 +108,7 @@ pub mod pallet {
 	// Alice is sysman by default
 	#[pallet::genesis_config]
 	pub struct GenesisConfig {
-		pub genesis_account: Vec<UserId>,
+		pub genesis_account: Vec<Vec<u8>>,
 	}
 
 	#[cfg(feature = "std")]
@@ -122,8 +123,8 @@ pub mod pallet {
 		fn build(&self) {
 			for role_id in &self.genesis_account {
 				let account = Account { role: Role::SYSMAN, status: RoleStatus::Approved };
-				<Accounts<T>>::insert(role_id.0, account);
-				SystemManager::<T>::insert(role_id.0, true);
+				<Accounts<T>>::insert(role_id, account);
+				SystemManager::<T>::insert(role_id, true);
 			}
 		}
 	}
@@ -162,7 +163,7 @@ pub mod pallet {
 			target: RoleId,
 		) -> DispatchResult {
 			let _ = ensure_signed(origin)?;
-			ensure!(Self::only_system(system), Error::<T>::PermissionDeny);
+			ensure!(Self::only_system(system.clone()), Error::<T>::PermissionDeny);
 			// only sysman execute
 			Self::check_account(&system, Role::SYSMAN)?;
 
