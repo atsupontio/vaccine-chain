@@ -14,3 +14,5 @@
 
 # direnv cache
 .direnv
+
+**/test/test-js/node_modules
