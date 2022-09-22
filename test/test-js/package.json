@@ -1,0 +1,11 @@
+{
+    "dependencies": {
+      "@polkadot/api": "^7.4.1"
+    },
+    "scripts": {
+      "test": "mocha --timeout 15000 --exit"
+    },
+    "devDependencies": {
+      "chai-bignumber": "^3.0.0"
+    }
+  }

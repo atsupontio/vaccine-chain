@@ -245,13 +245,18 @@ pub mod pallet {
 
 		fn check_account(who: &RoleId, role: Role) -> DispatchResult {
 			let account = <Accounts<T>>::get(who).unwrap();
+			log::info!("Here ");
 			match account.role {
+
 				a if a == role => match account.status {
+					
 					RoleStatus::Approved => return Ok(()),
 					RoleStatus::Revoked => Err(Error::<T>::AlreadyRevoked)?,
 					RoleStatus::Pending => Err(Error::<T>::NotApproved)?,
 				},
-				_ => Err(Error::<T>::InvalidRole)?,
+				_ => {
+					log::info!("Here 3");
+					return Err(Error::<T>::InvalidRole)?;},
 			}
 		}
 
