@@ -175,6 +175,7 @@ pub mod pallet {
 
 			// Update storage.
 			<Accounts<T>>::insert(&target, &account);
+			SystemManager::<T>::insert(target.clone(), true);
 
 			// Emit an event.
 			Self::deposit_event(Event::Approved(target));
