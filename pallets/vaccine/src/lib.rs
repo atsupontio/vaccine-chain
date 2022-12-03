@@ -7,6 +7,7 @@ use frame_system::pallet_prelude::*;
 /// <https://docs.substrate.io/v3/runtime/frame>
 pub use pallet::*;
 use pallet_account::{AccountPallet, Role, RoleId};
+use pallet_maci_verifier::VerifierPallet;
 use scale_info::TypeInfo;
 use sp_runtime::traits::SaturatedConversion;
 use sp_std::vec::Vec;
@@ -36,6 +37,7 @@ pub mod pallet {
 		type MaxListSize: Get<u32>;
 		type UnixTime: UnixTime;
 		type AccountInfo: AccountPallet;
+		type VerifierPallet: VerifierPallet;
 	}
 
 	pub type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
@@ -505,6 +507,22 @@ pub mod pallet {
 
 			// Emit an event.
 			Self::deposit_event(Event::HadVaccination(vac_id, user));
+			// Return a successful DispatchResultWithPostInfo
+			Ok(())
+		}
+
+		#[pallet::weight(10_000)]
+		pub fn check_immune(
+			origin: OriginFor<T>,
+			proof_a: Vec<u8>,
+			proof_b: Vec<u8>,
+			proof_c: Vec<u8>,
+			input: Vec<u8>,
+		) -> DispatchResult {
+			let _ = ensure_signed(origin.clone())?;
+
+			T::VerifierPallet::verifier(input)?;
+
 			// Return a successful DispatchResultWithPostInfo
 			Ok(())
 		}

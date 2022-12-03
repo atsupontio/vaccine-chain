@@ -51,6 +51,7 @@ hex-literal = { version = "0.3.4", optional = true }
 # Local Dependencies
 pallet-account = { version = "4.0.0-dev", default-features = false, path = "../pallets/account" }
 pallet-vaccine = { version = "4.0.0-dev", default-features = false, path = "../pallets/vaccine" }
+pallet-maci-verifier = { version = "4.0.0-dev", default-features = false, path = "../pallets/maci-verifier"}
 
 [build-dependencies]
 substrate-wasm-builder = { version = "5.0.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.23" }
@@ -68,6 +69,7 @@ std = [
 	"pallet-aura/std",
 	"pallet-balances/std",
 	"pallet-grandpa/std",
+	"pallet-maci-verifier/std",
 	"pallet-randomness-collective-flip/std",
 	"pallet-sudo/std",
 	"pallet-timestamp/std",

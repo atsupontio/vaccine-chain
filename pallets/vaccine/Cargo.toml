@@ -27,6 +27,7 @@ serde = { default-features = false, version = "1.0" }
 log = "0.4.17"
 pallet-timestamp = { default-features = false, version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.23" }
 pallet-account = { default-features = false, version = "4.0.0-dev", path = "../account"}
+pallet-maci-verifier = { default-features = false, version = "4.0.0-dev", path = "../maci-verifier"}
 
 [dev-dependencies]
 sp-core = { default-features = false, version = "6.0.0", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.23" }
@@ -40,6 +41,7 @@ std = [
 	"frame-support/std",
 	"pallet-balances/std",
 	"pallet-account/std",
+	"pallet-maci-verifier/std",
 	"frame-system/std",
 	"frame-benchmarking/std",
 	"sp-runtime/std",
