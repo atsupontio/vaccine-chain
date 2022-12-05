@@ -37,7 +37,7 @@ pub mod pallet {
 		type MaxListSize: Get<u32>;
 		type UnixTime: UnixTime;
 		type AccountInfo: AccountPallet;
-		type VerifierPallet: VerifierPallet;
+		type VerifierPallet: VerifierPallet<Self::AccountId>;
 	}
 
 	pub type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
@@ -519,9 +519,9 @@ pub mod pallet {
 			proof_c: Vec<u8>,
 			input: Vec<u8>,
 		) -> DispatchResult {
-			let _ = ensure_signed(origin.clone())?;
+			let who = ensure_signed(origin.clone())?;
 
-			T::VerifierPallet::verifier(input)?;
+			T::VerifierPallet::verifier(who,input)?;
 
 			// Return a successful DispatchResultWithPostInfo
 			Ok(())

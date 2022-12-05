@@ -6,23 +6,25 @@ pub mod types;
 pub mod parser;
 use types::{ProofStr, VkeyStr};
 use parser::{parse_proof, parse_vkey};
+use bellman_verifier::{prepare_verifying_key, verify_proof};
+use frame_support::pallet_prelude::*;
+use frame_system::pallet_prelude::*;
+use sp_std::vec::Vec;
+use sp_std::str::from_utf8;
+use bls12_381::Bls12;
+use ff::PrimeField as Fr;
+
+pub trait VerifierPallet<AccountId> {
+	fn verifier(who: AccountId,input: Vec<u8>) -> DispatchResult;
+}
+
 
 
 #[frame_support::pallet]
 pub mod pallet {
-	use crate::{ProofStr, VkeyStr};
-	use crate::{parse_proof, parse_vkey};
-	use bellman_verifier::{prepare_verifying_key, verify_proof};
-	use frame_support::pallet_prelude::*;
-	use frame_system::pallet_prelude::*;
-	use sp_std::vec::Vec;
-	use sp_std::str::from_utf8;
-	use bls12_381::Bls12;
-	use ff::PrimeField as Fr;
+	pub use super::*;
 
-	pub trait VerifierPallet {
-		fn verifier(input: Vec<u8>) -> DispatchResult;
-	}
+
 
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
@@ -98,44 +100,51 @@ pub mod pallet {
 			Ok(())
 		}
 
-		#[pallet::weight(0)]
-		pub fn verifier(origin: OriginFor<T>, input: Vec<u8>) -> DispatchResult {
-			let who = ensure_signed(origin)?;
+	
 
-			match <Pof<T>>::get(&who) {
-				None => return Err(Error::<T>::NoProof.into()),
-				Some(pof) => {
-					log::info!("{:?}", pof.pi_a);
-					let proof = parse_proof::<Bls12>(pof.clone());
-					log::info!("{:?}", proof.a);
-
-					match <Vkey<T>>::get(&who) {
-						None => return Err(Error::<T>::NoVerificationKey.into()),
-						Some(vkeystr) => {
-							log::info!("{:?}",vkeystr.alpha_1);
-							let vkey = parse_vkey::<Bls12>(vkeystr);
-							log::info!("{:?}",vkey.clone().alpha_g1);
-
-							let pvk =  prepare_verifying_key(&vkey);
-
-							let input_slice = input.as_slice();
-							let input_str: &str = from_utf8(&input_slice).unwrap();
-
-							
-							match verify_proof(&pvk, &proof, &[Fr::from_str_vartime(input_str).unwrap()]) {
-								Ok(()) => Self::deposit_event(Event::<T>::VerificationPassed(who)),
-								Err(e) => {
-									log::info!("{:?}", e);
-									()
-								}
-							}
-
-						}
-					}
-				},
-			}
-
-			Ok(())
-		}
 	}
+}
+
+
+
+impl<T: Config> VerifierPallet<T::AccountId> for  Pallet<T> {
+	fn verifier(who: T::AccountId, input: Vec<u8>) -> DispatchResult {
+		
+
+		match <Pof<T>>::get(&who) {
+			None => return Err(Error::<T>::NoProof.into()),
+			Some(pof) => {
+				log::info!("{:?}", pof.pi_a);
+				let proof = parse_proof::<Bls12>(pof.clone());
+				log::info!("{:?}", proof.a);
+
+				match <Vkey<T>>::get(&who) {
+					None => return Err(Error::<T>::NoVerificationKey.into()),
+					Some(vkeystr) => {
+						log::info!("{:?}",vkeystr.alpha_1);
+						let vkey = parse_vkey::<Bls12>(vkeystr);
+						log::info!("{:?}",vkey.clone().alpha_g1);
+
+						let pvk =  prepare_verifying_key(&vkey);
+
+						let input_slice = input.as_slice();
+						let input_str: &str = from_utf8(&input_slice).unwrap();
+
+						
+						match verify_proof(&pvk, &proof, &[Fr::from_str_vartime(input_str).unwrap()]) {
+							Ok(()) => Self::deposit_event(Event::<T>::VerificationPassed(who)),
+							Err(e) => {
+								log::info!("{:?}", e);
+								()
+							}
+						}
+
+					}
+				}
+			},
+		}
+
+		Ok(())
+	}
+
 }
