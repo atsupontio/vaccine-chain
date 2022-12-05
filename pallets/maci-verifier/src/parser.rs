@@ -56,6 +56,7 @@ where
 	let mut delta2: [u8; 192] = [0; 192];
 	let mut ic_0: [u8; 96] = [0; 96];
 	let mut ic_1: [u8; 96] = [0; 96];
+	let mut ic_2: [u8; 96] = [0; 96];
 	let mut ic = Vec::new();
 
 	for i in 0..vk_alpha_1.len() {
@@ -90,6 +91,10 @@ where
 		ic_1[i] = vk_ic[1][i];
 	}
 
+	for i in 0..vk_ic[1].len() {
+		ic_2[i] = vk_ic[2][i];
+	}
+
 	let alpha1_affine = G1Affine::from_uncompressed(&alpha1).unwrap();
 	let beta1_affine = G1Affine::from_uncompressed(&beta1).unwrap();
 	let beta2_affine = G2Affine::from_uncompressed(&beta2).unwrap();
@@ -98,8 +103,10 @@ where
 	let delta2_affine = G2Affine::from_uncompressed(&delta2).unwrap();
 	let ic0_affine = G1Affine::from_uncompressed(&ic_0).unwrap();
 	let ic1_affine = G1Affine::from_uncompressed(&ic_1).unwrap();
+	let ic2_affine = G1Affine::from_uncompressed(&ic_2).unwrap();
 	ic.push(ic0_affine);
 	ic.push(ic1_affine);
+	ic.push(ic2_affine);
 
 	VerifyingKey {
 		alpha_g1: alpha1_affine,

@@ -179,7 +179,7 @@ pub mod pallet {
 
 			// Emit an event.
 			Self::deposit_event(Event::Approved(target));
-			// Return a successful DispatchResultWithPostInfo
+			// Return a successful DispatchResultWithPostInfo  
 			Ok(())
 		}
 

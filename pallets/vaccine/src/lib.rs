@@ -160,6 +160,10 @@ pub mod pallet {
 	#[pallet::getter(fn vaccine_type)]
 	pub type VaccineType<T: Config> = StorageValue<_, Vec<VacType>, ValueQuery>;
 
+	#[pallet::storage]
+	#[pallet::getter(fn cid_storage)]
+	pub type CIDStorage<T: Config> = StorageMap<_, Blake2_128Concat, Vec<u8>, bool, ValueQuery>;
+
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
@@ -170,6 +174,7 @@ pub mod pallet {
 		VaccineApproved(VacId, RoleId),
 		HadVaccination(VacId, RoleId),
 		RegisterVaccineType,
+		StoreCID(Vec<u8>)
 	}
 
 	// Errors inform users that something went wrong.
@@ -187,6 +192,7 @@ pub mod pallet {
 		VaccineTypeIsRegistered,
 		ManuCanNotCreateVaccine,
 		FailToPush,
+		NotExistCID,
 	}
 
 	#[pallet::call]
@@ -511,17 +517,41 @@ pub mod pallet {
 			Ok(())
 		}
 
+		// user confirm vaccine
+		#[pallet::weight(10_000)]
+		pub fn register_cid(
+			origin: OriginFor<T>,
+			CID: Vec<u8>,
+		) -> DispatchResult {
+			let _ = ensure_signed(origin)?;
+
+			// TODO: only GOV
+
+			CIDStorage::<T>::insert(CID.clone(), true);
+
+			// Emit an event.
+			Self::deposit_event(Event::StoreCID(CID));
+			// Return a successful DispatchResultWithPostInfo
+			Ok(())
+		}
+
 		#[pallet::weight(10_000)]
 		pub fn check_immune(
 			origin: OriginFor<T>,
 			proof_a: Vec<u8>,
 			proof_b: Vec<u8>,
 			proof_c: Vec<u8>,
-			input: Vec<u8>,
+			user_id: Vec<u8>,
+			hashed_name_and_birth: Vec<u8>,
+			CID: Vec<u8>,
 		) -> DispatchResult {
 			let who = ensure_signed(origin.clone())?;
 
-			T::VerifierPallet::verifier(who,input)?;
+			let is_existent_CID = Self::cid_storage(CID.clone());
+
+			ensure!(is_existent_CID, Error::<T>::NotExistCID);
+
+			T::VerifierPallet::verifier(who, proof_a, proof_b, proof_c, hashed_name_and_birth, CID)?;
 
 			// Return a successful DispatchResultWithPostInfo
 			Ok(())
