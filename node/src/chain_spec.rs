@@ -1,6 +1,6 @@
 use node_template_runtime::{
 	AccountConfig, AccountId, AuraConfig, BalancesConfig, GenesisConfig, GrandpaConfig, Signature,
-	SudoConfig, SystemConfig, WASM_BINARY,
+	SudoConfig, SystemConfig, WASM_BINARY, VaccineConfig, pallet_vaccine::PassportInfo,
 };
 use pallet_account::UserId;
 use sc_service::ChainType;
@@ -66,6 +66,7 @@ pub fn development_config() -> Result<ChainSpec, String> {
 				],
 				true,
 				vec!["0".as_bytes().to_vec()],
+				vec!["0".as_bytes().to_vec()],
 			)
 		},
 		// Bootnodes
@@ -115,6 +116,7 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
 				],
 				true,
 				vec!["0".as_bytes().to_vec()],
+				vec!["0".as_bytes().to_vec()],
 			)
 		},
 		// Bootnodes
@@ -139,6 +141,7 @@ fn testnet_genesis(
 	endowed_accounts: Vec<AccountId>,
 	_enable_println: bool,
 	system_account: Vec<Vec<u8>>,
+	genesis_passports: Vec<Vec<u8>>
 ) -> GenesisConfig {
 	GenesisConfig {
 		system: SystemConfig {
@@ -161,5 +164,8 @@ fn testnet_genesis(
 			key: Some(root_key),
 		},
 		transaction_payment: Default::default(),
+		vaccine: VaccineConfig {
+			genesis_passports
+		}
 	}
 }

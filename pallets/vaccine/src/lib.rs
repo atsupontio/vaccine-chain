@@ -162,7 +162,30 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::getter(fn cid_storage)]
-	pub type CIDStorage<T: Config> = StorageMap<_, Blake2_128Concat, Vec<u8>, bool, ValueQuery>;
+	pub type CIDStorage<T: Config> = StorageMap<_, Blake2_128Concat, [u8; 32], bool, ValueQuery>;
+
+	// Alice is sysman by default
+	#[pallet::genesis_config]
+	pub struct GenesisConfig {
+		pub genesis_passports: Vec<Vec<u8>>,
+	}
+
+	#[cfg(feature = "std")]
+	impl Default for GenesisConfig {
+		fn default() -> Self {
+			Self { genesis_passports: Default::default() }
+		}
+	}
+
+	#[pallet::genesis_build]
+	impl<T: Config> GenesisBuild<T> for GenesisConfig {
+		fn build(&self) {
+			for account in &self.genesis_passports {
+				let pass = PassportInfo { user_id: account.clone(), vac_list:Default::default() , inoculation_count: 2 };
+				<VaccinePassports<T>>::insert(account, pass);
+			}
+		}
+	}
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -174,7 +197,8 @@ pub mod pallet {
 		VaccineApproved(VacId, RoleId),
 		HadVaccination(VacId, RoleId),
 		RegisterVaccineType,
-		StoreCID(Vec<u8>)
+		StoreCID([u8; 32]),
+		GetApprovedVaccinationCount(u32),
 	}
 
 	// Errors inform users that something went wrong.
@@ -193,6 +217,7 @@ pub mod pallet {
 		ManuCanNotCreateVaccine,
 		FailToPush,
 		NotExistCID,
+		NotRegisteredVaccinePass,
 	}
 
 	#[pallet::call]
@@ -521,7 +546,7 @@ pub mod pallet {
 		#[pallet::weight(10_000)]
 		pub fn register_cid(
 			origin: OriginFor<T>,
-			CID: Vec<u8>,
+			CID: [u8; 32],
 		) -> DispatchResult {
 			let _ = ensure_signed(origin)?;
 
@@ -542,8 +567,8 @@ pub mod pallet {
 			proof_b: Vec<u8>,
 			proof_c: Vec<u8>,
 			user_id: Vec<u8>,
-			hashed_name_and_birth: Vec<u8>,
-			CID: Vec<u8>,
+			hashed_name_and_birth: [u8; 32],
+			CID: [u8; 32],
 		) -> DispatchResult {
 			let who = ensure_signed(origin.clone())?;
 
@@ -552,6 +577,12 @@ pub mod pallet {
 			ensure!(is_existent_CID, Error::<T>::NotExistCID);
 
 			T::VerifierPallet::verifier(who, proof_a, proof_b, proof_c, hashed_name_and_birth, CID)?;
+
+			let count = match Self::vaccine_passports(user_id) {
+				None => return Err(Error::<T>::NotRegisteredVaccinePass.into()),
+				Some(pass) => pass.inoculation_count
+			};
+			Self::deposit_event(Event::<T>::GetApprovedVaccinationCount(count));
 
 			// Return a successful DispatchResultWithPostInfo
 			Ok(())

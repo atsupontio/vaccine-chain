@@ -91,7 +91,7 @@ where
 		ic_1[i] = vk_ic[1][i];
 	}
 
-	for i in 0..vk_ic[1].len() {
+	for i in 0..vk_ic[2].len() {
 		ic_2[i] = vk_ic[2][i];
 	}
 

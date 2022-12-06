@@ -11,12 +11,13 @@ use frame_support::pallet_prelude::*;
 use frame_system::pallet_prelude::*;
 use sp_std::vec::Vec;
 use sp_std::str::from_utf8;
-use bls12_381::Bls12;
-use ff::PrimeField as Fr;
 use scale_info::prelude::string::String;
+use sp_std::borrow::ToOwned;
+use bls12_381::{Bls12, Scalar};
+use ff::PrimeField as Fr;
 
 pub trait VerifierPallet<AccountId> {
-	fn verifier(who: AccountId, proof_a: Vec<u8>, proof_b: Vec<u8>, proof_c: Vec<u8>, input1: Vec<u8>, input2: Vec<u8>) -> DispatchResult;
+	fn verifier(who: AccountId, proof_a: Vec<u8>, proof_b: Vec<u8>, proof_c: Vec<u8>, input1: [u8; 32], input2: [u8; 32]) -> DispatchResult;
 }
 
 
@@ -97,13 +98,14 @@ pub mod pallet {
 
 
 impl<T: Config> VerifierPallet<T::AccountId> for  Pallet<T> {
+
 	fn verifier(
 		who: T::AccountId,
 		proof_a: Vec<u8>,
 		proof_b: Vec<u8>,
 		proof_c: Vec<u8>, 
-		input1: Vec<u8>,
-		input2: Vec<u8>
+		input1: [u8; 32],
+		input2: [u8; 32]
 	) -> DispatchResult {
 		
 		let proof = ProofStr { pi_a: proof_a, pi_b: proof_b, pi_c: proof_c };
@@ -128,21 +130,24 @@ impl<T: Config> VerifierPallet<T::AccountId> for  Pallet<T> {
 
 						let input1_slice = input1.as_slice();
 						let input1_string = input1_slice.iter().map(|&s| s as char).collect::<String>();
-						let new_input1 = String::from_utf8(input1_slice.to_vec()).unwrap();
+						let input1_str = "0x".to_owned() + &input1_string;
+						log::info!("input1: {:?}",input1_str.clone());
+						let input1_scalar = Scalar::from_repr(input1).unwrap();
 
 						let input2_slice = input2.as_slice();
 						let input2_string = input2_slice.iter().map(|&s| s as char).collect::<String>();
-						let new_input2 = String::from_utf8(input2_slice.to_vec()).unwrap();
+						let input2_str = "0x".to_owned() + &input2_string;
+						log::info!("input2: {:?}",input2_str.clone());
+						let input2_scalar = Scalar::from_repr(input2).unwrap();
 
 	
-						match verify_proof(&pvk, &proof, &[Fr::from_str_vartime(&new_input1).unwrap(), Fr::from_str_vartime(&new_input2).unwrap()]) {
+						match verify_proof(&pvk, &proof, &[input1_scalar, input2_scalar]) {
 							Ok(()) => Self::deposit_event(Event::<T>::VerificationPassed(who)),
 							Err(e) => {
 								log::info!("{:?}", e);
 								()
 							}
 						}
-
 					}
 				}
 			},
