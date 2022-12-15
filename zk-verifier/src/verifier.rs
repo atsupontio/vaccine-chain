@@ -1,57 +1,36 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use group::{prime::PrimeCurveAffine, Curve};
-use pairing::{MillerLoopResult, MultiMillerLoop};
-use super::{PreparedVerifyingKey, Proof, VerifyingKey, VerificationError};
+use ark_crypto_primitives::{Error, SNARK};
+use ark_ec::{PairingEngine};
+use ark_ec::bls12;
+use ark_ec::AffineCurve;
+use ark_groth16::{Groth16, Proof, VerifyingKey};
+use ark_serialize::CanonicalDeserialize;
+use arkworks_native_gadgets::to_field_elements;
+use sp_std::marker::PhantomData;
+use ark_bls12_381::Bls12_381;
+use ark_ff::PrimeField;
+// pub struct ArkworksVerifierGroth16<E: PairingEngine>;
 
-use sp_std::ops::{AddAssign, Neg};
-
-pub fn prepare_verifying_key<E: MultiMillerLoop>(vk: &VerifyingKey<E>) -> PreparedVerifyingKey<E> {
-
-    let gamma = vk.gamma_g2.neg();
-    let delta = vk.delta_g2.neg();
-
-    PreparedVerifyingKey {
-        alpha_g1_beta_g2: E::pairing(&vk.alpha_g1, &vk.beta_g2),
-        neg_gamma_g2: gamma.into(),
-        neg_delta_g2: delta.into(),
-        ic: vk.ic.clone(),
-    }
+pub fn verify_groth16<E: PairingEngine>(
+	vk: &VerifyingKey<E>,
+	public_inputs: &[E::Fr],
+	proof: &Proof<E>,
+) -> Result<bool, Error> {
+	let res = Groth16::<E>::verify(vk, public_inputs, proof)?;
+	Ok(res)
 }
 
-pub fn verify_proof<'a, E: MultiMillerLoop>(
-    pvk: &'a PreparedVerifyingKey<E>,
-    proof: &Proof<E>,
-    public_inputs: &[E::Fr],
-) -> Result<(), VerificationError> {
-    if (public_inputs.len() + 1) != pvk.ic.len() {
-        return Err(VerificationError::InvalidVerifyingKey);
-    }
-
-    let mut acc = pvk.ic[0].to_curve();
-
-    for (i, b) in public_inputs.iter().zip(pvk.ic.iter().skip(1)) {
-        AddAssign::<&E::G1>::add_assign(&mut acc, &(*b * i));
-    }
-
-    // The original verification equation is:
-    // A * B = alpha * beta + inputs * gamma + C * delta
-    // ... however, we rearrange it so that it is:
-    // A * B - inputs * gamma - C * delta = alpha * beta
-    // or equivalently:
-    // A * B + inputs * (-gamma) + C * (-delta) = alpha * beta
-    // which allows us to do a single final exponentiation.
-
-    if pvk.alpha_g1_beta_g2
-        == E::multi_miller_loop(&[
-            (&proof.a, &proof.b.into()),
-            (&acc.to_affine(), &pvk.neg_gamma_g2),
-            (&proof.c, &pvk.neg_delta_g2),
-        ])
-        .final_exponentiation()
-    {
-        Ok(())
-    } else {
-        Err(VerificationError::InvalidProof)
-    }
+pub fn verify<E: PairingEngine>(public_inp_bytes: &[u8], proof_bytes: &[u8], vk_bytes: &[u8]) -> Result<bool, Error> {
+	let public_input_field_elts = to_field_elements::<E::Fr>(public_inp_bytes)?;
+	let vk = VerifyingKey::<E>::deserialize(vk_bytes)?;
+	let proof = Proof::<E>::deserialize(proof_bytes)?;
+	let res = verify_groth16::<E>(&vk, &public_input_field_elts, &proof)?;
+	Ok(res)
 }
+
+// use ark_bn254::Bn254;
+// pub type ArkworksVerifierBn254 = ArkworksVerifierGroth16<Bn254>;
+
+// use ark_bls12_381::Bls12_381;
+// pub type ArkworksVerifierBls381 = ArkworksVerifierGroth16<Bls12_381>;

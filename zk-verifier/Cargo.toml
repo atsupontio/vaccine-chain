@@ -1,21 +1,47 @@
 [package]
 description = "A zk-SNARK library compatiable with substrate"
 license = "MIT/Apache-2.0"
-name = "bellman-verifier"
+name = "arkworks-verifier"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-group = { version = "0.12", default-features = false }
-pairing = { version = "0.22", default-features = false }
+frame-support = { default-features = false, version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.23"}
 codec = { package = "parity-scale-codec", version = "3.0.0", default-features = false, features = [
 	"derive",
 ] }
 sp-std = { default-features = false, version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.23" }
 
+# Arkworks
+ark-crypto-primitives = { version = "^0.3.0", default-features = false }
+ark-ec = { version = "^0.3.0", default-features = false }
+ark-ff = { version = "^0.3.0", default-features = false }
+ark-groth16 = { version = "^0.3.0", default-features = false }
+ark-serialize = { version = "^0.3.0", default-features = false, features = [ "derive" ] }
+arkworks-native-gadgets = { version = "1.2.0", default-features = false, optional = true }
+ark-bn254 = { version = "^0.3.0", default-features = false, features = [ "curve" ], optional = true }
+ark-bls12-381 = { version = "^0.3.0", default-features = false, features = [ "curve" ], optional = true }
+
 [features]
-default = ["std"]
+default = ["std", "hashing", "verifying", "field_ops"]
 std = [
     "codec/std",
+    "frame-support/std",
     "sp-std/std",
+    "ark-ec/std",
+    "ark-ff/std",
+]
+field_ops = [
+	"ark-bls12-381",
+	"ark-bn254",
+]
+hashing = [
+    "arkworks-native-gadgets",
+    "ark-bls12-381",
+	"ark-bn254",
+]
+verifying = [
+    "arkworks-native-gadgets",
+    "ark-bls12-381",
+	"ark-bn254",
 ]

@@ -1,57 +1,106 @@
+// This file is part of Webb.
+
+// Copyright (C) 2021 Webb Technologies Inc.
+// SPDX-License-Identifier: Apache-2.0
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// 	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+//! # Verifier Module
+//!
+//! A simple module for abstracting over arbitrary zero-knowledge verifiers
+//! for arbitrary zero-knowledge gadgets. This pallet should store verifying
+//! keys and any other verification specific parameters for different backends
+//! that we support in Webb's ecosystem of runtime modules.
+//!
+//! ## Overview
+//!
+//! The Verifier module provides functionality for zero-knowledge verifier
+//! management including:
+//!
+//! * Setting parameters for zero-knowledge verifier
+//! * Setting the maintainer of the parameters
+//!
+//! To use it in your runtime, you need to implement the verifier [`Config`].
+//! Additionally, you will want to implement the verifier traits defined in the
+//! webb_primitives::verifier module.
+//!
+//! The supported dispatchable functions are documented in the [`Call`] enum.
+//!
+//! ### Terminology
+//!
+//! ### Goals
+//!
+//! The verifier system in Webb is designed to make the following possible:
+//!
+//! * Define.
+//!
+//! ## Interface
+//!
+//! ## Related Modules
+//!
+//! * [`System`](../frame_system/index.html)
+//! * [`Support`](../frame_support/index.html)
+
+// Ensure we're `no_std` when compiling for Wasm.
 #![cfg_attr(not(feature = "std"), no_std)]
 
 pub use pallet::*;
 
-pub mod types;
-pub mod parser;
-use types::{ProofStr, VkeyStr};
-use parser::{parse_proof, parse_vkey};
-use bellman_verifier::{prepare_verifying_key, verify_proof};
-use frame_support::pallet_prelude::*;
-use frame_system::pallet_prelude::*;
-use sp_std::vec::Vec;
-use sp_std::str::from_utf8;
-use scale_info::prelude::string::String;
-use sp_std::borrow::ToOwned;
-use bls12_381::{Bls12, Scalar};
-use ff::PrimeField as Fr;
+use sp_std::convert::TryInto;
+use sp_std::prelude::*;
 
-pub trait VerifierPallet<AccountId> {
-	fn verifier(who: AccountId, proof_a: Vec<u8>, proof_b: Vec<u8>, proof_c: Vec<u8>, input1: [u8; 32], input2: [u8; 32]) -> DispatchResult;
+use frame_support::pallet_prelude::{ensure, DispatchError, DispatchResult};
+use arkworks_verifier::verify;
+use ark_bls12_381::Bls12_381;
+
+pub trait VerifierPallet {
+	fn verifier(public_inp_bytes: &[u8], proof: &[u8]) -> DispatchResult;
 }
-
-
 
 #[frame_support::pallet]
 pub mod pallet {
-	pub use super::*;
-
-
-
-	#[pallet::config]
-	pub trait Config: frame_system::Config {
-		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
-	}
+	use super::*;
+	use frame_support::{dispatch::DispatchResultWithPostInfo, pallet_prelude::*};
+	use frame_system::pallet_prelude::*;
 
 	#[pallet::pallet]
 	#[pallet::without_storage_info]
 	pub struct Pallet<T>(_);
 
+	#[pallet::config]
+	/// The module configuration trait.
+	pub trait Config: frame_system::Config {
+		/// The overarching event type.
+		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
+
+	}
+
+
 	#[pallet::storage]
 	#[pallet::getter(fn proof_store)]
-	pub type Pof<T: Config> = StorageMap<_, Blake2_128Concat, u8, ProofStr, OptionQuery>;
+	pub type Pof<T: Config> = StorageMap<_, Blake2_128Concat, u8, Vec<u8>, OptionQuery>;
 
 
 	#[pallet::storage]
 	#[pallet::getter(fn vkey_store)]
-	pub type Vkey<T: Config> = StorageMap<_, Blake2_128Concat, u8, VkeyStr, OptionQuery>;
+	pub type Vkey<T: Config> = StorageMap<_, Blake2_128Concat, u8, Vec<u8>, OptionQuery>;
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
-		ProofStored(ProofStr, T::AccountId),
-		VerificationKeyStore(VkeyStr, T::AccountId),
-		VerificationPassed(T::AccountId),
+		ProofStored(Vec<u8>),
+		VerificationKeyStore(Vec<u8>),
+		VerificationPassed(),
 	}
 
 	#[pallet::error]
@@ -61,99 +110,55 @@ pub mod pallet {
 		VerificationFailed,
 	}
 
+	#[pallet::hooks]
+	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {}
+
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		#[pallet::weight(0)]
+		#[pallet::weight(10000)]
 		pub fn add_vkey(
 			origin: OriginFor<T>,
-			
-			vk_alpha1: Vec<u8>,
-			vk_beta_1: Vec<u8>,
-			vk_beta_2: Vec<u8>,
-			vk_gamma_2: Vec<u8>,
-			vk_delta_1: Vec<u8>,
-			vk_delta_2: Vec<u8>,
-			vk_ic: Vec<Vec<u8>>,
+			vkey: Vec<u8>,
 		) -> DispatchResult {
-			let who = ensure_signed(origin)?;
+			let _ = ensure_signed(origin)?;
 			
-			let vkey = VkeyStr {
-				alpha_1: vk_alpha1,
-				beta_1: vk_beta_1,
-				beta_2: vk_beta_2,
-				gamma_2: vk_gamma_2,
-				delta_1: vk_delta_1,
-				delta_2: vk_delta_2,
-				ic: vk_ic,
-			};
 	
-			<Vkey<T>>::insert(1, &vkey);
+			<Vkey<T>>::insert(1, vkey.clone());
 			
-			Self::deposit_event(Event::<T>::VerificationKeyStore(vkey, who));
+			Self::deposit_event(Event::<T>::VerificationKeyStore(vkey));
 			Ok(())
 		}
 	}
 }
 
+impl<T: Config> VerifierPallet for Pallet<T> {
 
+	fn verifier(public_inp_bytes: &[u8], proof: &[u8]) -> DispatchResult {
 
-impl<T: Config> VerifierPallet<T::AccountId> for  Pallet<T> {
-
-	fn verifier(
-		who: T::AccountId,
-		proof_a: Vec<u8>,
-		proof_b: Vec<u8>,
-		proof_c: Vec<u8>, 
-		input1: [u8; 32],
-		input2: [u8; 32]
-	) -> DispatchResult {
-		
-		let proof = ProofStr { pi_a: proof_a, pi_b: proof_b, pi_c: proof_c };
-		<Pof<T>>::insert(1, &proof);
-		Self::deposit_event(Event::<T>::ProofStored(proof, who.clone()));
+		<Pof<T>>::insert(1, proof);
+		Self::deposit_event(Event::<T>::ProofStored(proof.to_vec()));
 
 		match <Pof<T>>::get(1) {
 			None => return Err(Error::<T>::NoProof.into()),
 			Some(pof) => {
-				log::info!("{:?}", pof.pi_a);
-				let proof = parse_proof::<Bls12>(pof.clone());
-				log::info!("{:?}", proof.a);
+				log::info!("{:?}", pof);
 
 				match <Vkey<T>>::get(1) {
 					None => return Err(Error::<T>::NoVerificationKey.into()),
 					Some(vkeystr) => {
-						log::info!("{:?}",vkeystr.alpha_1);
-						let vkey = parse_vkey::<Bls12>(vkeystr);
-						log::info!("{:?}",vkey.clone().alpha_g1);
+						log::info!("{:?}",vkeystr);
 
-						let pvk =  prepare_verifying_key(&vkey);
-
-						let input1_slice = input1.as_slice();
-						let input1_string = input1_slice.iter().map(|&s| s as char).collect::<String>();
-						let input1_str = "0x".to_owned() + &input1_string;
-						log::info!("input1: {:?}",input1_str.clone());
-						let input1_scalar = Scalar::from_repr(input1).unwrap();
-
-						let input2_slice = input2.as_slice();
-						let input2_string = input2_slice.iter().map(|&s| s as char).collect::<String>();
-						let input2_str = "0x".to_owned() + &input2_string;
-						log::info!("input2: {:?}",input2_str.clone());
-						let input2_scalar = Scalar::from_repr(input2).unwrap();
-
-	
-						match verify_proof(&pvk, &proof, &[input1_scalar, input2_scalar]) {
-							Ok(()) => Self::deposit_event(Event::<T>::VerificationPassed(who)),
+						match verify::<Bls12_381>(public_inp_bytes, proof, &vkeystr) {
+							Ok(true) => Self::deposit_event(Event::<T>::VerificationPassed()),
+							Ok(false) => Err(Error::<T>::VerificationFailed)?,
 							Err(e) => {
 								log::info!("{:?}", e);
-								()
-							}
+							},
 						}
 					}
 				}
-			},
+			}
 		}
-
 		Ok(())
 	}
-
 }

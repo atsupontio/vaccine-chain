@@ -6,42 +6,53 @@ authors = ["DoraFactory"]
 edition = "2021"
 publish = false
 
-[package.metadata.docs.rs]
-targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
-codec = { package = "parity-scale-codec", version = "3.0.0", default-features = false, features = [
-	"derive",
-] }
+codec = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive", "max-encoded-len"] }
 scale-info = { version = "2.1.1", default-features = false, features = ["derive"] }
-frame-support = { default-features = false, version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.23"}
-frame-system = { default-features = false, version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.23" }
-frame-benchmarking = { default-features = false, version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.23", optional = true }
-sp-std = { default-features = false, version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.23" }
-
+log = { version = "0.4.14", default-features = false }
+frame-support = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.23" }
+frame-system = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.23" }
+sp-runtime = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.23" }
+sp-std = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.23" }
 # zk lib
-bellman-verifier = { path = "../../zk-verifier", default-features = false}
+arkworks-verifier = { path = "../../zk-verifier", default-features = false, features = ["verifying"]}
 # bellman-verifier = { git = "https://github.com/DoraFactory/snarkjs-bellman-adapter.git", default-features = false, version = "0.1.0"}
-ff = { version = "0.12" }
-pairing = { version = "0.22", default-features = false }
-bls12_381 = {version = "0.7" }
+ark-bls12-381 = { version = "^0.3.0", default-features = false, features = [ "curve" ], optional = true }
+ark-bn254 = { version = "^0.3.0", default-features = false, features = [ "curve" ], optional = true }
+
 
 hex = { version = "0.4", default-features = false }
 
-# log
-log = "0.4.17"
+[dev-dependencies]
+serde = { version = "1.0.119" }
+sp-core = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.23" }
+sp-io = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.23" }
+sp-runtime = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.23" }
+pallet-balances = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.23" }
+ark-crypto-primitives = { version = "^0.3.0", features = ["r1cs"], default-features = false }
 
 [features]
-default = ["std"]
+default = ["std", "hashing", "verifying", "field_ops"]
 std = [
-	"codec/std",
-	"scale-info/std",
-	"frame-support/std",
-	"frame-system/std",
-	"frame-benchmarking/std",
-	"sp-std/std",
-	"bellman-verifier/std",
+    "codec/std",
+    "frame-support/std",
+    "frame-system/std",
+    "sp-runtime/std",
+    "sp-std/std",
+    "arkworks-verifier/std",
 ]
 
-runtime-benchmarks = ["frame-benchmarking/runtime-benchmarks"]
-try-runtime = ["frame-support/try-runtime"]
+field_ops = [
+	"ark-bls12-381",
+    "ark-bn254",
+]
+hashing = [
+    "ark-bls12-381",
+    "ark-bn254",
+]
+verifying = [
+    "ark-bls12-381",
+    "ark-bn254",
+]
+

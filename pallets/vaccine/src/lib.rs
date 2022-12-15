@@ -8,6 +8,7 @@ use frame_system::pallet_prelude::*;
 pub use pallet::*;
 use pallet_account::{AccountPallet, Role, RoleId};
 use pallet_maci_verifier::VerifierPallet;
+// use arkworks_verifier::VerifierModule;
 use scale_info::TypeInfo;
 use sp_runtime::traits::SaturatedConversion;
 use sp_std::vec::Vec;
@@ -37,7 +38,7 @@ pub mod pallet {
 		type MaxListSize: Get<u32>;
 		type UnixTime: UnixTime;
 		type AccountInfo: AccountPallet;
-		type VerifierPallet: VerifierPallet<Self::AccountId>;
+		type VerifierPallet: VerifierPallet<>;
 	}
 
 	pub type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
@@ -563,11 +564,9 @@ pub mod pallet {
 		#[pallet::weight(10_000)]
 		pub fn check_immune(
 			origin: OriginFor<T>,
-			proof_a: Vec<u8>,
-			proof_b: Vec<u8>,
-			proof_c: Vec<u8>,
-			user_id: Vec<u8>,
-			hashed_name_and_birth: [u8; 32],
+			pub_input: Vec<u8>,
+			proof: Vec<u8>,
+			user_id: RoleId,
 			CID: [u8; 32],
 		) -> DispatchResult {
 			let who = ensure_signed(origin.clone())?;
@@ -576,7 +575,8 @@ pub mod pallet {
 
 			ensure!(is_existent_CID, Error::<T>::NotExistCID);
 
-			T::VerifierPallet::verifier(who, proof_a, proof_b, proof_c, hashed_name_and_birth, CID)?;
+			// T::VerifierPallet::verifier(who, proof_a, proof_b, proof_c, hashed_name_and_birth, CID)?;
+			T::VerifierPallet::verifier(&pub_input, &proof)?;
 
 			let count = match Self::vaccine_passports(user_id) {
 				None => return Err(Error::<T>::NotRegisteredVaccinePass.into()),
