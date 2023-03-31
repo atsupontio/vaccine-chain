@@ -141,18 +141,19 @@ impl<T: Config> VerifierPallet for Pallet<T> {
 		match <Pof<T>>::get(1) {
 			None => return Err(Error::<T>::NoProof.into()),
 			Some(pof) => {
-				log::info!("{:?}", pof);
+				// log::info!("{:?}", pof);
 
 				match <Vkey<T>>::get(1) {
 					None => return Err(Error::<T>::NoVerificationKey.into()),
 					Some(vkeystr) => {
-						log::info!("{:?}",vkeystr);
+						// log::info!("{:?}",vkeystr);
 
 						match verify::<Bls12_381>(public_inp_bytes, proof, &vkeystr) {
 							Ok(true) => Self::deposit_event(Event::<T>::VerificationPassed()),
 							Ok(false) => Err(Error::<T>::VerificationFailed)?,
 							Err(e) => {
 								log::info!("{:?}", e);
+								Err(Error::<T>::VerificationFailed)?
 							},
 						}
 					}

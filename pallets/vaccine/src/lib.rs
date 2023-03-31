@@ -12,6 +12,15 @@ use pallet_maci_verifier::VerifierPallet;
 use scale_info::TypeInfo;
 use sp_runtime::traits::SaturatedConversion;
 use sp_std::vec::Vec;
+use scale_info::prelude::string::String;
+
+use arkworks_native_gadgets::prelude::ark_ff::Fp256;
+use arkworks_native_gadgets::{ from_field_elements};
+use ark_serialize::*;
+use ark_bls12_381::Fr;
+
+const NUM_ID: usize = 40; // 35
+const NUM_NAMR_BIRTH: usize = 40; // 32
 
 #[cfg(feature = "std")]
 use serde::{Deserialize, Serialize};
@@ -562,18 +571,43 @@ pub mod pallet {
 		}
 
 		#[pallet::weight(10_000)]
+		pub fn demo_register_vac_pass(
+			origin: OriginFor<T>,
+			user_id: RoleId,
+			vac_id: VacId,
+		) -> DispatchResult {
+			// issuing vaccine passport
+			Self::register_vac_pass(user_id.clone(), vac_id.clone())?;
+			Ok(())
+		}
+
+		#[pallet::weight(10_000)]
 		pub fn check_immune(
 			origin: OriginFor<T>,
-			pub_input: Vec<u8>,
+			name_birth_hash: Vec<u8>,
 			proof: Vec<u8>,
 			user_id: RoleId,
 			CID: [u8; 32],
 		) -> DispatchResult {
 			let who = ensure_signed(origin.clone())?;
 
+			log::info!("{:?}", user_id);
+
 			let is_existent_CID = Self::cid_storage(CID.clone());
 
 			ensure!(is_existent_CID, Error::<T>::NotExistCID);
+
+			let mut statement = Vec::new();
+			let primitive_result = Fp256::deserialize(CID.as_slice()).unwrap();
+			let (id_bits, name_birth_bits) = Self::get_public_input(user_id.clone(), name_birth_hash);
+			statement.push(primitive_result);
+			for i in 0..NUM_ID * 8{
+				statement.push(Fr::from(id_bits[i]))
+			}
+			for i in 0..NUM_NAMR_BIRTH * 8{
+				statement.push(Fr::from(name_birth_bits[i]))
+			}	
+			let pub_input = from_field_elements(&statement).unwrap();
 
 			// T::VerifierPallet::verifier(who, proof_a, proof_b, proof_c, hashed_name_and_birth, CID)?;
 			T::VerifierPallet::verifier(&pub_input, &proof)?;
@@ -637,6 +671,54 @@ pub mod pallet {
 
 			Ok(())
 		}
+
+		pub fn hexdump(bytes: &[u8], max: usize) -> Vec<u8> {
+
+			let mut sum = Vec::new();
+		
+			// println!("{} bytes:", bytes.len());
+			for (i, b) in bytes.iter().enumerate() {
+				// b: &u8 の値を2桁の16進数で表示する
+				let a = *b;
+				sum.push(a);
+		
+			}
+		
+			let count = max - bytes.len();
+			for i in 0..count {
+				sum.push(000)
+			}
+			sum
+		}
+
+		pub fn bytes_to_bits(bytes: &[u8]) -> Vec<bool> {
+			let mut bits = Vec::new();
+			for byte in bytes {
+				for i in 0..8 {
+					bits.push((byte >> i) & 1 == 1);
+				}
+			}
+			bits
+		}
+
+		/// return (id_bits, name_birth_bits)
+		pub fn get_public_input(id: Vec<u8>, name_birth_hash: Vec<u8>) -> (Vec<bool>, Vec<bool>) {
+
+			// id
+			// base58 decode id
+			// let new_id = base58::FromBase58::from_base58(id.as_str()).unwrap();
+	
+			// byte(0 padding)
+			let id_bytes_fix = Self::hexdump(&id, NUM_ID);
+
+
+			let id_bits = Self::bytes_to_bits(&id_bytes_fix);
+			let name_birth_bits = Self::bytes_to_bits(&name_birth_hash);
+
+			(id_bits, name_birth_bits)
+
+		}
+		
 	}
 }
 
@@ -663,7 +745,7 @@ mod as_string {
 	pub fn deserialize<'de, D: Deserializer<'de>>(
 		deserializer: D,
 	) -> Result<Option<[u8; 36]>, D::Error> {
-		let s: Option<String> = Option::<String>::deserialize(deserializer)?;
+		let s: Option<String> = <std::option::Option<std::string::String> as frame_support::Deserialize>::deserialize(deserializer)?;
 
 		if let Some(s) = s {
 			return Ok(Some(s.as_bytes().try_into().unwrap()))

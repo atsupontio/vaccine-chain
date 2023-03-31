@@ -25,10 +25,14 @@ sp-std = { default-features = false, version = "4.0.0-dev", git = "https://githu
 sp-runtime = { default-features = false, version = "6.0.0", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.23" }
 serde = { default-features = false, version = "1.0" }
 log = "0.4.17"
+base58 = { version = "0.2.0", default-features = false }
 pallet-timestamp = { default-features = false, version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.23" }
 pallet-account = { default-features = false, version = "4.0.0-dev", path = "../account"}
 pallet-maci-verifier = { default-features = false, version = "4.0.0-dev", path = "../maci-verifier"}
 arkworks-verifier = { path = "../../zk-verifier", default-features = false, features = ["verifying"]}
+arkworks-native-gadgets = { version = "1.2.0", default-features = false }
+ark-serialize = "^0.3.0"
+ark-bls12-381 = { version = "^0.3.0", features = [ "curve" ] }
 
 [dev-dependencies]
 sp-core = { default-features = false, version = "6.0.0", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.23" }
